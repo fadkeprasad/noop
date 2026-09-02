@@ -8,7 +8,9 @@ import WhoopProtocol
 /// the caller's `stepTicksPerStep` calibration). Mirrors the Android StepsCounterTest vectors value-for-value.
 final class StepsCounterTests: XCTestCase {
 
-    private func step(_ ts: Int, _ counter: Int) -> StepSample { StepSample(ts: ts, counter: counter) }
+    private func step(_ ts: Int, _ counter: Int, _ activityClass: Int? = nil) -> StepSample {
+        StepSample(ts: ts, counter: counter, activityClass: activityClass)
+    }
 
     func testSumsPositiveConsecutiveDeltas() {
         // counters 100 -> 150 -> 220 => deltas 50 + 70 = 120
@@ -46,5 +48,21 @@ final class StepsCounterTests: XCTestCase {
         // Exactly maxStepDelta (512) is dropped; 511 counts.
         XCTAssertEqual(StepsCounter.stepsInWindow([step(0, 0), step(60, 512)]), nil)   // 512 dropped => no movement
         XCTAssertEqual(StepsCounter.stepsInWindow([step(0, 0), step(60, 511)]), 511)   // 511 kept
+    }
+
+    func testCountsOnlyWalkAndRunWhenActivityClassesAreAvailable() {
+        // Deltas are attributed to the later sample: still 50 and unknown 30 are ignored; walk 70 and run
+        // 40 count. This rejects gym/arm motion while retaining actual locomotion on WHOOP 5/MG (#1780).
+        let samples = [
+            step(0, 100, 0), step(60, 150, 0), step(120, 220, 1),
+            step(180, 250, nil), step(240, 290, 2),
+        ]
+        XCTAssertEqual(StepsCounter.stepsInWindow(samples), 110)
+    }
+
+    func testAllUnknownActivityClassesPreserveLegacyCounterBehavior() {
+        // Pre-@63 rows have no activity class at all, so their historical 50 + 70 total remains readable.
+        XCTAssertEqual(StepsCounter.stepsInWindow(
+            [step(0, 100, nil), step(60, 150, nil), step(120, 220, nil)]), 120)
     }
 }

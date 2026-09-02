@@ -15,9 +15,9 @@ import kotlin.math.max
 //
 //  2. rawCounterTrace(...) - the WHOOP 5/MG raw path. Reports the cumulative step_motion_counter series and
 //     its WRAP-AWARE deltas (cur - prev) and 0xFFFF, the dropped deltas (>= 512, a sync-gap / reboot
-//     boundary, not real steps), and the same total AnalyticsEngine.analyzeDay sums, with the SAME
-//     maxStepDelta gate and the SAME ticks-per-step scaling, so the trace and the daily steps_est can never
-//     diverge.
+//     boundary, not real steps), the @63 walk/run filter, and the same total AnalyticsEngine.analyzeDay sums,
+//     with the SAME maxStepDelta gate and the SAME ticks-per-step scaling, so the trace and the daily
+//     steps_est can never diverge.
 //
 // No clock, no IO, no PII (counts and ratios only). The Steps test mode gates each call behind
 // TestCentre.active(STEPS) at the call site (IntelligenceEngine); when the mode is off neither is ever
@@ -87,9 +87,10 @@ object StepsEstimateEngineTrace {
     /**
      * The WHOOP 5/MG raw-counter trace for one day. Recomputes the SAME wrap-aware sum [AnalyticsEngine.analyzeDay]
      * runs over the cumulative step_motion_counter series: the time-ordered records filtered to the LOCAL day,
-     * each consecutive (cur - prev) and 0xFFFF increment, the dropped deltas (>= maxStepDelta), and the
-     * ticksPerStep scaling. Reports the counter series length, kept/dropped delta counts, raw tick total and
-     * scaled steps - the SAME value the daily steps_est carries. Mirrors the Swift StepsEstimateEngine.rawCounterTrace.
+     * each consecutive (cur - prev) and 0xFFFF increment, the dropped deltas (>= maxStepDelta), the walk/run
+     * activity-class filter, and the ticksPerStep scaling. Reports the counter series length,
+     * kept/dropped/non-locomotion delta counts, raw tick total and scaled steps - the SAME value the daily
+     * steps_est carries. Mirrors the Swift StepsEstimateEngine.rawCounterTrace.
      */
     fun rawCounterTrace(
         daySteps: List<StepSample>,
@@ -134,18 +135,24 @@ object StepsEstimateEngineTrace {
         }
 
         // Walk the wrap-aware deltas exactly as the production sum does.
+        val classFilterAvailable = sorted.any { it.activityClass != null }
         var rawTotal = 0
         var keptDeltas = 0
         var droppedDeltas = 0
+        var nonLocomotionDeltas = 0
         var minDelta = Int.MAX_VALUE
         var maxDelta = Int.MIN_VALUE
         for (i in 1 until sorted.size) {
             val delta = (sorted[i].counter - sorted[i - 1].counter) and 0xFFFF // wrap-aware u16 increment
             if (delta in 1 until maxStepDelta) {
-                rawTotal += delta
-                keptDeltas += 1
-                minDelta = minOf(minDelta, delta)
-                maxDelta = maxOf(maxDelta, delta)
+                if (StepsCounter.countsAsStepDelta(sorted[i].activityClass, classFilterAvailable)) {
+                    rawTotal += delta
+                    keptDeltas += 1
+                    minDelta = minOf(minDelta, delta)
+                    maxDelta = maxOf(maxDelta, delta)
+                } else {
+                    nonLocomotionDeltas += 1
+                }
             } else if (delta >= maxStepDelta) {
                 droppedDeltas += 1 // a sync-gap / reboot boundary, not real steps (>= 512)
             }
@@ -159,6 +166,7 @@ object StepsEstimateEngineTrace {
         )
         lines.add(
             "stepsRaw deltas kept=$keptDeltas dropped=$droppedDeltas " +
+                "nonLocomotion=$nonLocomotionDeltas " +
                 "(dropped = delta>=$maxStepDelta, a sync-gap/reboot boundary)",
         )
         if (keptDeltas > 0) {

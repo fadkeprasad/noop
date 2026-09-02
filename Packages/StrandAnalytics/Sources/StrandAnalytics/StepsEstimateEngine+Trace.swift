@@ -13,8 +13,9 @@ import WhoopProtocol
 //
 //  2. rawCounterTrace(...) - the WHOOP 5/MG raw path. Reports the cumulative step_motion_counter series and
 //     its WRAP-AWARE deltas (cur - prev) & 0xFFFF, the dropped deltas (>= 512, a sync-gap / reboot boundary,
-//     not real steps), and the same total AnalyticsEngine.analyzeDay sums, with the SAME maxStepDelta gate
-//     and the SAME ticks-per-step scaling, so the trace and the daily steps_est value can never diverge.
+//     not real steps), the @63 walk/run filter, and the same total AnalyticsEngine.analyzeDay sums, with the
+//     SAME maxStepDelta gate and the SAME ticks-per-step scaling, so the trace and the daily steps_est value
+//     can never diverge.
 //
 // No clock, no I/O, no PII (counts and ratios only). A fixture pins the exact lines. The Steps test mode
 // gates each call behind TestCentre.active(.steps) at the call site (IntelligenceEngine); when the mode is
@@ -76,8 +77,9 @@ extension StepsEstimateEngine {
     /// The WHOOP 5/MG raw-counter trace for one day. Recomputes the SAME wrap-aware sum
     /// `AnalyticsEngine.analyzeDay` runs over the cumulative `step_motion_counter` series: the time-ordered
     /// records filtered to the LOCAL day, each consecutive `(cur - prev) & 0xFFFF` increment, the dropped
-    /// deltas (>= `maxStepDelta`, a sync-gap / reboot boundary), and the `ticksPerStep` scaling. Reports the
-    /// counter series length, the kept/dropped delta counts, the raw tick total and the scaled steps - the
+    /// deltas (>= `maxStepDelta`, a sync-gap / reboot boundary), the walk/run activity-class filter, and the
+    /// `ticksPerStep` scaling. Reports the counter series length, the kept/dropped/non-locomotion delta
+    /// counts, the raw tick total and the scaled steps - the
     /// SAME value the daily `steps_est` carries (byte-identical math), so the trace can never diverge.
     ///
     /// - Parameters mirror the analyzeDay step block exactly: the day's step samples (any order), the local
@@ -120,18 +122,25 @@ extension StepsEstimateEngine {
         }
 
         // Walk the wrap-aware deltas exactly as the production sum does.
+        let classFilterAvailable = sorted.contains { $0.activityClass != nil }
         var rawTotal = 0
         var keptDeltas = 0
         var droppedDeltas = 0
+        var nonLocomotionDeltas = 0
         var minDelta = Int.max
         var maxDelta = Int.min
         for i in 1..<sorted.count {
             let delta = (sorted[i].counter - sorted[i - 1].counter) & 0xFFFF  // wrap-aware u16 increment
             if delta >= 1 && delta < maxStepDelta {
-                rawTotal += delta
-                keptDeltas += 1
-                minDelta = Swift.min(minDelta, delta)
-                maxDelta = Swift.max(maxDelta, delta)
+                if StepsCounter.countsAsStepDelta(activityClass: sorted[i].activityClass,
+                                                  classFilterAvailable: classFilterAvailable) {
+                    rawTotal += delta
+                    keptDeltas += 1
+                    minDelta = Swift.min(minDelta, delta)
+                    maxDelta = Swift.max(maxDelta, delta)
+                } else {
+                    nonLocomotionDeltas += 1
+                }
             } else if delta >= maxStepDelta {
                 droppedDeltas += 1   // a sync-gap / reboot boundary, not real steps (>= 512)
             }
@@ -142,6 +151,7 @@ extension StepsEstimateEngine {
         lines.append("stepsRaw day=\(dayKey) counterSamples=\(sorted.count) "
             + "firstCounter=\(firstCounter) lastCounter=\(lastCounter) (cumulative u16 @57)")
         lines.append("stepsRaw deltas kept=\(keptDeltas) dropped=\(droppedDeltas) "
+            + "nonLocomotion=\(nonLocomotionDeltas) "
             + "(dropped = delta>=\(maxStepDelta), a sync-gap/reboot boundary)")
         if keptDeltas > 0 {
             lines.append("stepsRaw keptRange min=\(minDelta) max=\(maxDelta) "

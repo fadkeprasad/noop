@@ -13,7 +13,8 @@ import org.junit.Test
  */
 class StepsCounterTest {
 
-    private fun step(ts: Long, counter: Int) = StepSample(deviceId = "my-whoop", ts = ts, counter = counter)
+    private fun step(ts: Long, counter: Int, activityClass: Int? = null) =
+        StepSample(deviceId = "my-whoop", ts = ts, counter = counter, activityClass = activityClass)
 
     @Test fun sumsPositiveConsecutiveDeltas() {
         // counters 100 -> 150 -> 220 => deltas 50 + 70 = 120
@@ -50,5 +51,23 @@ class StepsCounterTest {
         // Exactly MAX_STEP_DELTA (512) is dropped; 511 counts.
         assertNull(StepsCounter.stepsInWindow(listOf(step(0, 0), step(60, 512))))
         assertEquals(511, StepsCounter.stepsInWindow(listOf(step(0, 0), step(60, 511))))
+    }
+
+    @Test fun countsOnlyWalkAndRunWhenActivityClassesAreAvailable() {
+        // Deltas are attributed to the later sample: still 50 and unknown 30 are ignored; walk 70 and run
+        // 40 count. This rejects gym/arm motion while retaining actual locomotion on WHOOP 5/MG (#1780).
+        val samples = listOf(
+            step(0, 100, 0), step(60, 150, 0), step(120, 220, 1),
+            step(180, 250, null), step(240, 290, 2),
+        )
+        assertEquals(110, StepsCounter.stepsInWindow(samples))
+    }
+
+    @Test fun allUnknownActivityClassesPreserveLegacyCounterBehavior() {
+        // Pre-@63 rows have no activity class at all, so their historical 50 + 70 total remains readable.
+        assertEquals(
+            120,
+            StepsCounter.stepsInWindow(listOf(step(0, 100, null), step(60, 150, null), step(120, 220, null))),
+        )
     }
 }

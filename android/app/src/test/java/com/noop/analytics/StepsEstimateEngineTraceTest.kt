@@ -21,8 +21,13 @@ class StepsEstimateEngineTraceTest {
     private val dayUtc = "2026-01-02"
     private val noonUtc = 1_767_355_200L
 
-    private fun step(tsOffsetSec: Long, counter: Int) =
-        StepSample(deviceId = "my-whoop", ts = noonUtc + tsOffsetSec, counter = counter)
+    private fun step(tsOffsetSec: Long, counter: Int, activityClass: Int? = null) =
+        StepSample(
+            deviceId = "my-whoop",
+            ts = noonUtc + tsOffsetSec,
+            counter = counter,
+            activityClass = activityClass,
+        )
 
     // MARK: 5/MG raw-counter trace
 
@@ -61,6 +66,22 @@ class StepsEstimateEngineTraceTest {
         )
         assertTrue(lines.any { it.contains("stepsRaw deltas kept=2 dropped=1") })
         assertTrue(lines.first { it.startsWith("stepsRaw total ") }.contains("scaledSteps=$production"))
+    }
+
+    @Test fun activityClassFilterMatchesProductionAndIsReported() {
+        val samples = listOf(
+            step(0, 100, 0), step(60, 150, 0), step(120, 220, 1),
+            step(180, 250, null), step(240, 290, 2),
+        )
+        val production = AnalyticsEngine.analyzeDay(day = dayUtc, steps = samples, profile = profile).daily.steps
+        assertEquals(110, production) // walk 70 + run 40; still 50 and unknown 30 excluded
+        val lines = StepsEstimateEngineTrace.rawCounterTrace(
+            daySteps = samples, dayKey = dayUtc, tzOffsetSeconds = 0L, ticksPerStep = profile.stepTicksPerStep,
+        )
+        assertTrue(lines.any { it.contains("kept=2 dropped=0 nonLocomotion=2") })
+        val total = lines.first { it.startsWith("stepsRaw total ") }
+        assertTrue(total.contains("rawTicks=110"))
+        assertTrue(total.contains("scaledSteps=$production"))
     }
 
     @Test fun ticksPerStepScalingMatchesAnalyzeDay() {
