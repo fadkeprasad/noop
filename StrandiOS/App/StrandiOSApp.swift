@@ -309,6 +309,14 @@ struct StrandiOSApp: App {
                 } message: {
                     healthImportAlertMessage
                 }
+                // A process restored for bluetooth-central work can already have an active scene by the
+                // time this view appears. In that case SwiftUI does not deliver a new `.active` transition,
+                // so the scenePhase hook below never drains a re-score left by a backgrounded pass. Run the
+                // durable catch-up once from the view lifecycle as well; it is idempotent and the model's
+                // computing guard keeps it from competing with the launch cadence or an offload pass.
+                .task {
+                    await model.runDeferredRescoreIfOwed()
+                }
                 // Bring the watch link up once at launch (WCSession ignores a redundant activate), then
                 // push the first snapshot so a watch that's already on-wrist gets current scores without
                 // waiting for the next foreground. activate() is idempotent + a no-op where WC isn't
