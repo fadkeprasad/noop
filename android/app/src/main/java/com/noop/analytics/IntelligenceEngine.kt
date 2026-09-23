@@ -1942,11 +1942,7 @@ object IntelligenceEngine {
             candidatePriorities, resolvedScoreOwnerByDay,
             IntelligencePersistence.LegacyScoreClock(nowLocalMidnight, nowSeconds, tzOffsetSeconds), out,
         )
-        if (preserveUnscoredHistoryForRun) {
-            IntelligencePersistence.persistComputedWindow(repo, computedWindow, true)
-        } else {
-            repo.replaceComputedScoreWindow(computedWindow)
-        }
+        IntelligencePersistence.persistComputedWindow(repo, computedWindow, preserveUnscoredHistoryForRun)
 
         persistFitnessVitalityAndSteps(
             repo = repo,
