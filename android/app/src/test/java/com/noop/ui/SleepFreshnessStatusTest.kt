@@ -43,17 +43,15 @@ class SleepFreshnessStatusTest {
     }
 
     /**
-     * #2108: a night already in hand silences CALCULATING.
-     *
-     * Reported as a banner that never goes away, and the screenshot showed worse than that: "detecting
-     * and staging the night now" printed directly above that same night, scored 82, timed 00:36 to
-     * 07:12, with its stages listed. The ladder checked `calculating` before `hasCurrentNight`, so a
-     * finished night could not silence it however complete it was. This is the combination none of the
-     * cases above covered, which is why it shipped.
+     * A score already on screen stays visible during a post-sync calculation, but the status must say it
+     * can still change. A silent return made a provisional wake boundary look final.
      */
     @Test
-    fun `a night already in hand silences calculating`() {
-        assertNull(resolveSleepFreshness(true, true, false, true, true, false))
+    fun `a night already in hand shows calculating while it updates`() {
+        assertEquals(
+            SleepFreshnessStatus.CALCULATING,
+            resolveSleepFreshness(true, true, false, true, true, false),
+        )
     }
 
     /**

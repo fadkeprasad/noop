@@ -49,6 +49,22 @@ final class IntelligenceEngine: ObservableObject {
     /// Uptime the pass holding `computing` started at, and how many days it covers; nil when none is running.
     private var runningPassStart: UInt64?
     private var runningPassDays = 0
+    /// Wall-clock start of the current pass, published for the per-night update note. This is status
+    /// only; scheduling and persistence still use the monotonic `runningPassStart` above.
+    @Published private(set) var currentPassStartedAt: TimeInterval?
+    @Published private(set) var currentPassDays = 0
+
+    /// A local forecast is available only after this install completed a pass over the same number of
+    /// days. The estimate deliberately has no cross-device/default fallback: a false deadline makes a
+    /// still-updating night look broken.
+    var estimatedCurrentPassRemainingSeconds: Double? {
+        guard let started = currentPassStartedAt else { return nil }
+        return RescoreBackgroundScheduler.estimatedRemainingSeconds(
+            lastSeconds: RescoreBackgroundScheduler.lastCompletedPassSeconds,
+            lastDays: RescoreBackgroundScheduler.lastCompletedPassDays,
+            currentDays: currentPassDays,
+            elapsedSeconds: Date().timeIntervalSince1970 - started)
+    }
     /// #899 heal bound: true while the last heal already re-armed a rescore, so a heal firing again on
     /// the very next pass cannot re-arm a second time (the Android twin is hard-bounded to exactly one
     /// re-pass; this mirrors it). Reset by any pass whose heal finds nothing, restoring the budget.
@@ -778,6 +794,8 @@ final class IntelligenceEngine: ObservableObject {
         computing = true
         runningPassStart = reScoreStart
         runningPassDays = maxDays
+        currentPassStartedAt = Date().timeIntervalSince1970
+        currentPassDays = maxDays
         // #1538: the pass is now past every gate and will do real work. Mark it started durably, so that a
         // process killed mid-pass leaves evidence a LATER process can read — the killed process itself gets
         // no chance to record anything. Cleared beside the watermark at the end; there is no early return
@@ -804,6 +822,8 @@ final class IntelligenceEngine: ObservableObject {
         defer {
             computing = false
             runningPassStart = nil
+            currentPassStartedAt = nil
+            currentPassDays = 0
             if pendingForcedRescore {
                 pendingForcedRescore = false
                 // Carry THIS pass's window into the re-pass: a heal firing during a wide one-shot pass
@@ -2908,7 +2928,8 @@ final class IntelligenceEngine: ObservableObject {
         // background wake from one that never could, instead of guessing from a constant — the cost varies
         // by more than an order of magnitude with history size.
         let elapsed = Double(DispatchTime.now().uptimeNanoseconds &- reScoreStart) / 1_000_000_000
-        let settled = RescoreBackgroundScheduler.markRescoreCompleted(seconds: elapsed, owedToken: owedToken)
+        let settled = RescoreBackgroundScheduler.markRescoreCompleted(seconds: elapsed, days: maxDays,
+                                                                        owedToken: owedToken)
         diagnosticSink?("re-score: done — scored \(scoredNights.count) night(s) in \(Int(elapsed * 1000)) ms (#1005)", nil)
         diagnosticSink?(RescoreBackgroundScheduler.passCostLogLine(
             cpuSeconds: RescoreBackgroundScheduler.processCPUSeconds().flatMap { end in reScoreCPUStart.map { end - $0 } },

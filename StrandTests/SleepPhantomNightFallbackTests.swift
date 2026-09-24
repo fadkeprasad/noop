@@ -80,16 +80,12 @@ final class SleepPhantomNightFallbackTests: XCTestCase {
 
     // Missing-night honesty: the newest stored night may stay visible, but the status above it must say
     // whether today's night is still moving through sync/analysis or finished without a detection.
-    /// #2108: a night already in hand silences `.calculating`.
-    ///
-    /// Reported as a banner that never clears, and the screenshot showed worse: "detecting and staging
-    /// the night now" printed directly above that same night, scored, timed and staged. The ladder
-    /// checked `calculating` before `hasCurrentNight`, so a finished night could not silence it however
-    /// complete it was. This is the combination none of the cases below covered, which is why it shipped.
-    /// Twin of the Kotlin `a night already in hand silences calculating`.
-    func testFreshnessNightInHandSilencesCalculating() {
-        XCTAssertNil(resolveSleepFreshness(hasCurrentNight: true, morningReady: true, syncing: false,
-                                           calculating: true, syncedSinceDayStart: true, syncFailed: false))
+    /// A current score remains visible during a post-sync re-score, but the screen must say it may still
+    /// change. The old silent return made a provisional endpoint look final.
+    func testFreshnessNightInHandShowsUpdatingWhileCalculating() {
+        XCTAssertEqual(resolveSleepFreshness(hasCurrentNight: true, morningReady: true, syncing: false,
+                                             calculating: true, syncedSinceDayStart: true, syncFailed: false),
+                       .updating)
     }
 
     /// `.syncing` deliberately still outranks a present night: data landing now can change what is shown,

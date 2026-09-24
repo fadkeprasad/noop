@@ -35,6 +35,10 @@ enum RescoreBackgroundScheduler {
     static let owedKey = "noop.rescoreOwed"
     /// Seconds the last COMPLETED pass took. Only ever written by a pass that reached the end.
     static let lastPassSecondsKey = "noop.rescoreLastPassSeconds"
+    /// Width of the completed pass that supplied `lastPassSecondsKey`. A duration only forecasts a
+    /// future pass of the same width; carrying a 21-day warm pass over to a 4,000-day repair would
+    /// turn a measured fact into a misleading promise.
+    static let lastPassDaysKey = "noop.rescoreLastPassDays"
 
     /// Identifies the MOST RECENT debt, so a pass can tell its own from someone else's (#1681).
     ///
@@ -71,6 +75,23 @@ enum RescoreBackgroundScheduler {
         guard UserDefaults.standard.object(forKey: lastPassSecondsKey) != nil else { return nil }
         let value = UserDefaults.standard.double(forKey: lastPassSecondsKey)
         return value.isFinite && value > 0 ? value : nil
+    }
+
+    static var lastCompletedPassDays: Int? {
+        guard UserDefaults.standard.object(forKey: lastPassDaysKey) != nil else { return nil }
+        let value = UserDefaults.standard.integer(forKey: lastPassDaysKey)
+        return value > 0 ? value : nil
+    }
+
+    /// Remaining wall time based only on a completed pass of the same width. Nil means the app has no
+    /// comparable local measurement yet, which the UI must describe as unknown instead of inventing a
+    /// deadline. Pure so the estimate policy stays testable without UserDefaults or a running engine.
+    static func estimatedRemainingSeconds(lastSeconds: Double?, lastDays: Int?, currentDays: Int,
+                                          elapsedSeconds: Double) -> Double? {
+        guard let lastSeconds, lastSeconds.isFinite, lastSeconds > 0,
+              let lastDays, lastDays == currentDays,
+              elapsedSeconds.isFinite, elapsedSeconds >= 0 else { return nil }
+        return max(0, lastSeconds - elapsedSeconds)
     }
 
     /// When the last pass started (unix seconds), written only by a pass that is about to work, never by
@@ -133,7 +154,7 @@ enum RescoreBackgroundScheduler {
     /// recorded that scoring had not happened without ever recording why, and a pass that completes
     /// while leaving the mark set looks identical to one that cleared it unless something says so.
     @discardableResult
-    static func markRescoreCompleted(seconds: Double, owedToken: String?) -> Bool {
+    static func markRescoreCompleted(seconds: Double, days: Int? = nil, owedToken: String?) -> Bool {
         let settled = maySettleDebt(capturedToken: owedToken, currentToken: currentOwedToken)
         if settled {
             UserDefaults.standard.set(false, forKey: owedKey)
@@ -145,6 +166,7 @@ enum RescoreBackgroundScheduler {
         }
         if seconds.isFinite, seconds > 0 {
             UserDefaults.standard.set(seconds, forKey: lastPassSecondsKey)
+            if let days, days > 0 { UserDefaults.standard.set(days, forKey: lastPassDaysKey) }
         }
         return settled
     }

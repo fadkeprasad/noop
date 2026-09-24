@@ -2594,7 +2594,7 @@ struct SleepMarkCard: View {
 /// The "Syncing strap history…" note, shown only while a historical offload is running (#77). Owns the
 /// `LiveState` observation so the chunk count ticks without re-rendering the rest of the Sleep screen.
 enum SleepFreshnessStatus: Equatable {
-    case syncing, calculating, syncFailed, awaitingSync, notDetected
+    case syncing, updating, calculating, syncFailed, awaitingSync, notDetected
 }
 
 /// Pure priority ladder behind the Sleep status banner. "Missing" is deliberately held until morning so
@@ -2603,12 +2603,12 @@ func resolveSleepFreshness(hasCurrentNight: Bool, morningReady: Bool, syncing: B
                            calculating: Bool, syncedSinceDayStart: Bool,
                            syncFailed: Bool) -> SleepFreshnessStatus? {
     if syncing { return .syncing }
-    // #2108: a night already in hand outranks .calculating. It used to sit below, so `hasCurrentNight`
-    // could only silence the missing-night states and a finished night was structurally unable to
-    // silence this one: the banner said "detecting and staging the night now" directly above that same
-    // night scored, timed and staged on screen. A note that contradicts the content beside it is worse
-    // than no note, and one that is always on is read by nobody the day it matters. .syncing stays
-    // above, because data still arriving can genuinely change what is shown.
+    // A score already on screen can still be changing after a sync. Calling that state "final" was
+    // the source of the user's uncertainty; it needs an explicit update note, distinct from the empty
+    // state that is still finding a first sleep window.
+    if hasCurrentNight && calculating { return .updating }
+    // A present night silences only the missing-night states. Syncing and updating remain visible because
+    // they describe work that can still change the result on screen.
     if hasCurrentNight { return nil }
     if calculating { return .calculating }
     if !morningReady { return nil }
@@ -2623,30 +2623,45 @@ private struct SleepFreshnessNote: View {
     @EnvironmentObject private var intelligence: IntelligenceEngine
     let latestWakeTs: Int?
 
+    private static func estimateText(_ seconds: Double) -> String {
+        let roundedMinutes = max(1, Int((seconds / 60).rounded(.up)))
+        return roundedMinutes == 1 ? "about 1 minute" : "about \(roundedMinutes) minutes"
+    }
+
     var body: some View {
         let calendar = Calendar.current
-        let now = Date()
-        let start = calendar.startOfDay(for: now)
-        let current = latestWakeTs.map {
-            calendar.isDate(Date(timeIntervalSince1970: TimeInterval($0)), inSameDayAs: now)
-        } ?? false
-        // AppModel intentionally waits two quiet seconds after HISTORY_COMPLETE before starting the
-        // scoring pass. Treat that debounce as calculation too; otherwise the banner can flash the final
-        // "wasn't detected" verdict between sync completion and `intelligence.computing` becoming true.
-        let calculationQueued = live.lastSyncedAt.map {
-            (0..<5).contains(now.timeIntervalSince1970 - $0)
-        } ?? false
-        let status = resolveSleepFreshness(
-            hasCurrentNight: current,
-            morningReady: calendar.component(.hour, from: now) >= 6,
-            syncing: live.backfilling,
-            calculating: intelligence.computing || calculationQueued,
-            syncedSinceDayStart: (live.lastSyncedAt ?? 0) >= start.timeIntervalSince1970,
-            syncFailed: live.lastSyncError != nil
-        )
-        switch status {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let now = context.date
+            let start = calendar.startOfDay(for: now)
+            let current = latestWakeTs.map {
+                calendar.isDate(Date(timeIntervalSince1970: TimeInterval($0)), inSameDayAs: now)
+            } ?? false
+            // AppModel intentionally waits two quiet seconds after HISTORY_COMPLETE before starting the
+            // scoring pass. Treat that debounce as calculation too; otherwise the banner can flash the final
+            // "wasn't detected" verdict between sync completion and `intelligence.computing` becoming true.
+            let calculationQueued = live.lastSyncedAt.map {
+                (0..<5).contains(now.timeIntervalSince1970 - $0)
+            } ?? false
+            let status = resolveSleepFreshness(
+                hasCurrentNight: current,
+                morningReady: calendar.component(.hour, from: now) >= 6,
+                syncing: live.backfilling,
+                calculating: intelligence.computing || calculationQueued,
+                syncedSinceDayStart: (live.lastSyncedAt ?? 0) >= start.timeIntervalSince1970,
+                syncFailed: live.lastSyncError != nil
+            )
+            switch status {
         case .syncing:
             SyncingHistoryNote(chunks: live.syncChunksThisSession)
+        case .updating:
+            let message: LocalizedStringKey
+            if let estimate = intelligence.estimatedCurrentPassRemainingSeconds {
+                message = "NOOP is recalculating this night from the latest sync. It should be ready in \(Self.estimateText(estimate))."
+            } else {
+                message = "NOOP is recalculating this night from the latest sync. It will show an estimate after this device completes a comparable update."
+            }
+            DataPendingNote(title: "Updating last night's sleep…", message: message,
+                            symbol: "arrow.triangle.2.circlepath")
         case .calculating:
             DataPendingNote(title: "Calculating last night's sleep…",
                             message: "Your strap history is in. NOOP is detecting and staging the night now.",
@@ -2665,6 +2680,7 @@ private struct SleepFreshnessNote: View {
                             symbol: "moon.zzz")
         case nil:
             EmptyView()
+            }
         }
     }
 }

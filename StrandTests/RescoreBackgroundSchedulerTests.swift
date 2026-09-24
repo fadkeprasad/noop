@@ -13,6 +13,7 @@ final class RescoreBackgroundSchedulerTests: XCTestCase {
 
     private var savedOwed: Any?
     private var savedSeconds: Any?
+    private var savedDays: Any?
     private var savedToken: Any?
     private var savedAfterCompleted: Any?
     private var savedAttemptAt: Any?
@@ -23,6 +24,7 @@ final class RescoreBackgroundSchedulerTests: XCTestCase {
         // restore rather than assume this suite owns them.
         savedOwed = UserDefaults.standard.object(forKey: RescoreBackgroundScheduler.owedKey)
         savedSeconds = UserDefaults.standard.object(forKey: RescoreBackgroundScheduler.lastPassSecondsKey)
+        savedDays = UserDefaults.standard.object(forKey: RescoreBackgroundScheduler.lastPassDaysKey)
         savedToken = UserDefaults.standard.object(forKey: RescoreBackgroundScheduler.owedTokenKey)
         savedAfterCompleted = UserDefaults.standard.object(
             forKey: RescoreBackgroundScheduler.owedAfterCompletedPassKey)
@@ -30,6 +32,7 @@ final class RescoreBackgroundSchedulerTests: XCTestCase {
         UserDefaults.standard.removeObject(forKey: RescoreBackgroundScheduler.lastAttemptStartedAtKey)
         UserDefaults.standard.removeObject(forKey: RescoreBackgroundScheduler.owedKey)
         UserDefaults.standard.removeObject(forKey: RescoreBackgroundScheduler.lastPassSecondsKey)
+        UserDefaults.standard.removeObject(forKey: RescoreBackgroundScheduler.lastPassDaysKey)
         UserDefaults.standard.removeObject(forKey: RescoreBackgroundScheduler.owedTokenKey)
         UserDefaults.standard.removeObject(forKey: RescoreBackgroundScheduler.owedAfterCompletedPassKey)
     }
@@ -37,6 +40,7 @@ final class RescoreBackgroundSchedulerTests: XCTestCase {
     override func tearDown() {
         restore(savedOwed, RescoreBackgroundScheduler.owedKey)
         restore(savedSeconds, RescoreBackgroundScheduler.lastPassSecondsKey)
+        restore(savedDays, RescoreBackgroundScheduler.lastPassDaysKey)
         restore(savedToken, RescoreBackgroundScheduler.owedTokenKey)
         restore(savedAfterCompleted, RescoreBackgroundScheduler.owedAfterCompletedPassKey)
         restore(savedAttemptAt, RescoreBackgroundScheduler.lastAttemptStartedAtKey)
@@ -73,6 +77,19 @@ final class RescoreBackgroundSchedulerTests: XCTestCase {
 
         UserDefaults.standard.removeObject(forKey: RescoreBackgroundScheduler.lastPassSecondsKey)
         XCTAssertNil(RescoreBackgroundScheduler.lastCompletedPassSeconds)
+    }
+
+    func testForecastRequiresAComparableMeasuredPass() {
+        RescoreBackgroundScheduler.markRescoreCompleted(seconds: 180, days: 21, owedToken: nil)
+        XCTAssertEqual(RescoreBackgroundScheduler.lastCompletedPassDays, 21)
+        XCTAssertEqual(RescoreBackgroundScheduler.estimatedRemainingSeconds(
+            lastSeconds: RescoreBackgroundScheduler.lastCompletedPassSeconds,
+            lastDays: RescoreBackgroundScheduler.lastCompletedPassDays,
+            currentDays: 21, elapsedSeconds: 60), 120)
+        XCTAssertNil(RescoreBackgroundScheduler.estimatedRemainingSeconds(
+            lastSeconds: RescoreBackgroundScheduler.lastCompletedPassSeconds,
+            lastDays: RescoreBackgroundScheduler.lastCompletedPassDays,
+            currentDays: 4_000, elapsedSeconds: 60))
     }
 
     // MARK: - Deferral must move the work, never drop it

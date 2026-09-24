@@ -119,12 +119,11 @@ internal fun resolveSleepFreshness(
     syncFailed: Boolean,
 ): SleepFreshnessStatus? {
     if (syncing) return SleepFreshnessStatus.SYNCING
-    // #2108: a night already in hand outranks CALCULATING. It used to sit below, so `hasCurrentNight`
-    // could only silence the missing-night states and a finished night was structurally unable to
-    // silence this one: the banner said "detecting and staging the night now" directly above that same
-    // night scored, timed and staged on screen. A note that contradicts the content beside it is worse
-    // than no note, and one that is always on is read by nobody the day it matters. SYNCING stays above,
-    // because data still arriving can genuinely change what is shown.
+    // Keep a scored night visible, while still saying that a post-sync analysis can change it. The
+    // previous null return made a provisional wake boundary look final until the next refresh.
+    if (hasCurrentNight && calculating) return SleepFreshnessStatus.CALCULATING
+    // A present night silences only the missing-night states. Syncing and calculating remain visible
+    // because either can still change the result on screen.
     if (hasCurrentNight) return null
     if (calculating) return SleepFreshnessStatus.CALCULATING
     if (!morningReady) return null
