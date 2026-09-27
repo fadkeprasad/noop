@@ -15,6 +15,8 @@
     <string name="nav_sleep">Schlaf</string>
     <string name="sleep_status_calculating_title">Der Schlaf der letzten Nacht wird berechnet…</string>
     <string name="sleep_status_calculating_body">Dein Strap-Verlauf ist da. NOOP erkennt und analysiert die Nacht jetzt.</string>
+    <string name="sleep_status_updating_title">Der Schlaf der letzten Nacht wird aktualisiert…</string>
+    <string name="sleep_status_updating_body">Das aktuelle Schlafergebnis ist sichtbar und kann sich ändern, während NOOP den neuesten Verlauf des Armbands verarbeitet.</string>
     <string name="sleep_status_sync_failed_title">Der Schlaf der letzten Nacht wurde nicht synchronisiert</string>
     <string name="sleep_status_sync_failed_body">Die Verlaufssynchronisierung wurde vorzeitig beendet. Halte den Strap in der Nähe und versuche die Synchronisierung erneut.</string>
     <string name="sleep_status_waiting_title">Warten auf den Schlaf der letzten Nacht</string>

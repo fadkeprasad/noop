@@ -22,6 +22,8 @@
     <string name="nav_sleep">Sleep</string>
     <string name="sleep_status_calculating_title">Calculating last night’s sleep…</string>
     <string name="sleep_status_calculating_body">Your strap history is in. NOOP is detecting and staging the night now.</string>
+    <string name="sleep_status_updating_title">Updating last night’s sleep…</string>
+    <string name="sleep_status_updating_body">The current sleep result is visible and may change while NOOP processes the latest strap history.</string>
     <string name="sleep_status_sync_failed_title">Last night’s sleep hasn’t synced</string>
     <string name="sleep_status_sync_failed_body">The history sync stopped before it finished. Keep the strap nearby and try Sync again.</string>
     <string name="sleep_status_waiting_title">Waiting for last night’s sleep</string>

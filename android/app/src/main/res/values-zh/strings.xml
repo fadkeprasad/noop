@@ -13,6 +13,8 @@
     <string name="nav_sleep">睡眠</string>
     <string name="sleep_status_calculating_title">正在计算昨夜睡眠…</string>
     <string name="sleep_status_calculating_body">手环历史数据已到达。NOOP 正在识别并分析这一夜的睡眠。</string>
+    <string name="sleep_status_updating_title">正在更新昨夜睡眠…</string>
+    <string name="sleep_status_updating_body">当前睡眠结果已显示，在 NOOP 处理手环最新历史数据时，结果仍可能变化。</string>
     <string name="sleep_status_sync_failed_title">昨夜睡眠尚未同步</string>
     <string name="sleep_status_sync_failed_body">历史同步未完成就停止了。请将手环放在附近并再次尝试同步。</string>
     <string name="sleep_status_waiting_title">正在等待昨夜睡眠</string>

@@ -17,6 +17,8 @@
     <string name="nav_sleep">Сон</string>
     <string name="sleep_status_calculating_title">Рассчитываю сон за прошлую ночь…</string>
     <string name="sleep_status_calculating_body">История с браслета загружена. NOOP сейчас определяет и анализирует ночной сон.</string>
+    <string name="sleep_status_updating_title">Обновление данных сна за прошлую ночь…</string>
+    <string name="sleep_status_updating_body">Текущий результат сна уже виден и может измениться, пока NOOP обрабатывает новые данные браслета.</string>
     <string name="sleep_status_sync_failed_title">Сон за прошлую ночь не синхронизирован</string>
     <string name="sleep_status_sync_failed_body">Синхронизация истории остановилась до завершения. Держите браслет рядом и повторите попытку.</string>
     <string name="sleep_status_waiting_title">Ожидание сна за прошлую ночь</string>

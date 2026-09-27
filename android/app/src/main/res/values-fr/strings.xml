@@ -3,6 +3,8 @@
 
     <string name="sleep_status_calculating_title">Calcul du sommeil de la nuit dernière…</string>
     <string name="sleep_status_calculating_body">L’historique de votre bracelet est arrivé. NOOP détecte et analyse maintenant la nuit.</string>
+    <string name="sleep_status_updating_title">Mise à jour du sommeil de la nuit dernière…</string>
+    <string name="sleep_status_updating_body">Le résultat actuel est visible et peut changer pendant que NOOP traite les dernières données du bracelet.</string>
     <string name="sleep_status_sync_failed_title">Le sommeil de la nuit dernière n’a pas été synchronisé</string>
     <string name="sleep_status_sync_failed_body">La synchronisation de l’historique s’est arrêtée avant la fin. Gardez le bracelet à proximité et réessayez.</string>
     <string name="sleep_status_waiting_title">En attente du sommeil de la nuit dernière</string>

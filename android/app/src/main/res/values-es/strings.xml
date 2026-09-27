@@ -3,6 +3,8 @@
 
     <string name="sleep_status_calculating_title">Calculando el sueño de anoche…</string>
     <string name="sleep_status_calculating_body">El historial de tu pulsera ya está disponible. NOOP está detectando y analizando la noche.</string>
+    <string name="sleep_status_updating_title">Actualizando el sueño de anoche…</string>
+    <string name="sleep_status_updating_body">El resultado del sueño actual está visible y puede cambiar mientras NOOP procesa el historial más reciente de la pulsera.</string>
     <string name="sleep_status_sync_failed_title">El sueño de anoche no se ha sincronizado</string>
     <string name="sleep_status_sync_failed_body">La sincronización del historial se detuvo antes de terminar. Mantén la pulsera cerca e inténtalo de nuevo.</string>
     <string name="sleep_status_waiting_title">Esperando el sueño de anoche</string>

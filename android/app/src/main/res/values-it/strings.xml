@@ -18,6 +18,8 @@
     <string name="nav_sleep">Sonno</string>
     <string name="sleep_status_calculating_title">Calcolo del sonno della scorsa notte…</string>
     <string name="sleep_status_calculating_body">La cronologia della fascia è arrivata. NOOP sta rilevando e analizzando la notte.</string>
+    <string name="sleep_status_updating_title">Aggiornamento del sonno della scorsa notte…</string>
+    <string name="sleep_status_updating_body">Il risultato attuale del sonno è visibile e può cambiare mentre NOOP elabora i dati più recenti della fascia.</string>
     <string name="sleep_status_sync_failed_title">Il sonno della scorsa notte non è stato sincronizzato</string>
     <string name="sleep_status_sync_failed_body">La sincronizzazione della cronologia si è interrotta prima di terminare. Tieni la fascia vicina e riprova.</string>
     <string name="sleep_status_waiting_title">In attesa del sonno della scorsa notte</string>

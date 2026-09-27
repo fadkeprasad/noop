@@ -15,6 +15,8 @@
     <string name="nav_sleep">Sono</string>
     <string name="sleep_status_calculating_title">A calcular o sono da noite passada…</string>
     <string name="sleep_status_calculating_body">O histórico da bracelete chegou. A NOOP está agora a detetar e analisar a noite.</string>
+    <string name="sleep_status_updating_title">A atualizar o sono da noite passada…</string>
+    <string name="sleep_status_updating_body">O resultado atual do sono está visível e pode mudar enquanto o NOOP processa o histórico mais recente da pulseira.</string>
     <string name="sleep_status_sync_failed_title">O sono da noite passada não foi sincronizado</string>
     <string name="sleep_status_sync_failed_body">A sincronização do histórico parou antes de terminar. Mantém a bracelete por perto e tenta novamente.</string>
     <string name="sleep_status_waiting_title">À espera do sono da noite passada</string>

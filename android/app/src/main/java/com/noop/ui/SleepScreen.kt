@@ -99,7 +99,7 @@ import androidx.compose.runtime.setValue
 import com.noop.analytics.ClockFormat
 
 internal enum class SleepFreshnessStatus {
-    SYNCING, CALCULATING, SYNC_FAILED, AWAITING_SYNC, NOT_DETECTED,
+    SYNCING, UPDATING, CALCULATING, SYNC_FAILED, AWAITING_SYNC, NOT_DETECTED,
 }
 
 private data class SleepFreshnessLiveSnapshot(
@@ -121,12 +121,9 @@ internal fun resolveSleepFreshness(
     syncFailed: Boolean,
 ): SleepFreshnessStatus? {
     if (syncing) return SleepFreshnessStatus.SYNCING
-    // #2108: a night already in hand outranks CALCULATING. It used to sit below, so `hasCurrentNight`
-    // could only silence the missing-night states and a finished night was structurally unable to
-    // silence this one: the banner said "detecting and staging the night now" directly above that same
-    // night scored, timed and staged on screen. A note that contradicts the content beside it is worse
-    // than no note, and one that is always on is read by nobody the day it matters. SYNCING stays above,
-    // because data still arriving can genuinely change what is shown.
+    // A visible night can still change while a post-sync pass reprocesses history. Use a distinct state
+    // so its copy does not say NOOP is still detecting a night that is already on screen.
+    if (hasCurrentNight && calculating) return SleepFreshnessStatus.UPDATING
     if (hasCurrentNight) return null
     if (calculating) return SleepFreshnessStatus.CALCULATING
     if (!morningReady) return null
@@ -139,6 +136,10 @@ internal fun resolveSleepFreshness(
 private fun SleepFreshnessNote(status: SleepFreshnessStatus, chunks: Int) {
     when (status) {
         SleepFreshnessStatus.SYNCING -> SyncingHistoryNote(chunks)
+        SleepFreshnessStatus.UPDATING -> DataPendingNote(
+            title = stringResource(R.string.sleep_status_updating_title),
+            body = stringResource(R.string.sleep_status_updating_body),
+        )
         SleepFreshnessStatus.CALCULATING -> DataPendingNote(
             title = stringResource(R.string.sleep_status_calculating_title),
             body = stringResource(R.string.sleep_status_calculating_body),

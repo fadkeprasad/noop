@@ -13,6 +13,8 @@
     <string name="nav_sleep">Sen</string>
     <string name="sleep_status_calculating_title">Obliczanie snu z ostatniej nocy…</string>
     <string name="sleep_status_calculating_body">Historia z opaski jest już dostępna. NOOP wykrywa i analizuje teraz noc.</string>
+    <string name="sleep_status_updating_title">Aktualizowanie snu z ostatniej nocy…</string>
+    <string name="sleep_status_updating_body">Bieżący wynik snu jest widoczny i może się zmienić, gdy NOOP przetwarza najnowszą historię opaski.</string>
     <string name="sleep_status_sync_failed_title">Sen z ostatniej nocy nie został zsynchronizowany</string>
     <string name="sleep_status_sync_failed_body">Synchronizacja historii zatrzymała się przed ukończeniem. Trzymaj opaskę w pobliżu i spróbuj ponownie.</string>
     <string name="sleep_status_waiting_title">Oczekiwanie na sen z ostatniej nocy</string>
