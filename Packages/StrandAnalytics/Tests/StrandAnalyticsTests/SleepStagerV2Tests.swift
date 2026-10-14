@@ -237,6 +237,47 @@ final class SleepStagerV2Tests: XCTestCase {
         XCTAssertNil(SleepStagerV2.sustainedSleepOnset(wake), "an all-wake window has no onset")
     }
 
+    func testOnsetWakeExperimentCountsOnlyRepeatedRecentMotionBursts() {
+        let feats: [SleepStagerV2.Epoch] = (0..<24).map { i -> SleepStagerV2.Epoch in
+            let start: Int = 1_700_000_000 + i * 30
+            let jerk: Double = (i == 2 || i == 18) ? 0.06 : 0.001
+            return SleepStagerV2.Epoch(start: start, hr: nil, hrVar: nil, hrFlat11: nil,
+                                moveFrac: 0.0, jerkMax: jerk,
+                                respReg: nil, clock: 0.1, jerkScale: 0.001,
+                                minutesSinceOnset: Double(i) / 2)
+        }
+        XCTAssertEqual(SleepStagerV2.recentTurnCount(feats, through: 19), 2)
+        XCTAssertEqual(SleepStagerV2.recentTurnCount(feats, through: 23), 1,
+                       "a burst older than ten minutes no longer corroborates wake")
+        XCTAssertEqual(SleepStagerV2.recentTurnCount(feats, through: -1), 0)
+    }
+
+    func testOnsetWakeExperimentTracksTwoInjectedSettlingDurations() {
+        func staged(onsetMin: Int, experiment: Bool) -> [String] {
+            let feats = (0..<240).map { i -> SleepStagerV2.Epoch in
+                let awake = i < onsetMin * 2
+                let turn = awake && i % 8 == 2
+                return SleepStagerV2.Epoch(start: 1_700_000_000 + i * 30,
+                    hr: awake ? 74 : 54, hrVar: awake ? 8 : 1, hrFlat11: awake ? 7 : 1,
+                    moveFrac: turn ? 0.8 : 0.0, jerkMax: turn ? 0.06 : 0.001,
+                    respReg: nil, clock: Double(i) / 240, jerkScale: 0.001,
+                    minutesSinceOnset: Double(i) / 2)
+            }
+            return SleepStagerV2.stageEpochs(feats, useOnsetWakeExperiment: experiment)
+        }
+        for onset in [30, 60] {
+            let baseline = staged(onsetMin: onset, experiment: false)
+            let experimental = staged(onsetMin: onset, experiment: true)
+            XCTAssertGreaterThan(experimental.prefix(onset * 2).filter { $0 == "awake" }.count,
+                                 baseline.prefix(onset * 2).filter { $0 == "awake" }.count,
+                                 "repeated turns should let prefix HR evidence support wake for \(onset) min")
+            let baselineOnset = SleepStagerV2.sustainedSleepOnset(baseline) ?? 0
+            let experimentalOnset = SleepStagerV2.sustainedSleepOnset(experimental) ?? 0
+            XCTAssertGreaterThan(experimentalOnset, baselineOnset,
+                                 "the reported onset should move later when repeated turns sustain wake for \(onset) min")
+        }
+    }
+
     /// End-to-end: the same physiological night truncated to a shorter in-bed window must not shift where the
     /// REM guard stops applying. Both windows start at the same instant and share byte-identical streams, so
     /// any difference in the first ~60 min of the hypnogram would be the session-length dependence #930 is

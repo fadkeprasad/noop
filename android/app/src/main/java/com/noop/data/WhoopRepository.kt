@@ -1009,7 +1009,13 @@ class WhoopRepository(
      *  (userEdited = true, startTsAdjusted = null), so the recompute overlap guard preserves it and it is
      *  NEVER folded into the night's main sleep (which would mislabel the awake daytime gap as light
      *  sleep). Purely additive , the DAO's IGNORE-on-conflict makes a same-onset add a no-op. */
-    suspend fun addManualNap(strapDeviceId: String, startTs: Long, endTs: Long) {
+    suspend fun addManualNap(
+        strapDeviceId: String,
+        startTs: Long,
+        endTs: Long,
+        useOnsetWakeExperiment: Boolean = false,
+        useExperimentalSleepV2: Boolean = false,
+    ) {
         // #940 belt-and-braces (same rule as updateSleepSessionTimes): a manually-added session
         // can't end in the future or invert; a future nap would otherwise own the tab's newest day
         // as an all-awake phantom exactly like the bad edit did. The clamped end is used verbatim.
@@ -1017,7 +1023,11 @@ class WhoopRepository(
             startTs, endTs, System.currentTimeMillis() / 1000L,
         ) ?: return
         val computedId = computedDeviceId(strapDeviceId)
-        val stagesJSON = com.noop.analytics.SleepStageHealer.restageFromRaw(this, strapDeviceId, safeStartTs, safeEndTs)
+        val stagesJSON = com.noop.analytics.SleepStageHealer.restageFromRaw(
+            this, strapDeviceId, safeStartTs, safeEndTs,
+            useOnsetWakeExperiment = useOnsetWakeExperiment,
+            useExperimentalSleepV2 = useExperimentalSleepV2,
+        )
             ?: com.noop.analytics.AnalyticsEngine.encodeStages(
                 listOf(com.noop.analytics.StageSegment(start = safeStartTs, end = safeEndTs, stage = "wake")),
             )

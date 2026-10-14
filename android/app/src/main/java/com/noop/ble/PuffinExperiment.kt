@@ -86,6 +86,11 @@ class PuffinExperiment(
         get() = prefs.getBoolean(KEY_EXPERIMENTAL_SLEEP_V2, true)
         set(v) = prefs.edit().putBoolean(KEY_EXPERIMENTAL_SLEEP_V2, v).apply()
 
+    /** Experimental prefix wake corroboration; default OFF until validated across varied onset annotations. */
+    var onsetWakeExperiment: Boolean
+        get() = prefs.getBoolean(KEY_ONSET_WAKE_EXPERIMENT, false)
+        set(v) = prefs.edit().putBoolean(KEY_ONSET_WAKE_EXPERIMENT, v).apply()
+
     /** True if the user opted in to "HR-from-PPG sub-lag interpolation" (default false): the v26 optical-PPG
      *  gap-fill HR estimator ([com.noop.protocol.PpgHr]) refines its integer autocorrelation lag with a
      *  parabolic (Variant A) interpolation of the ACF peak, removing the ~+-8 bpm lag-quantization near a
@@ -341,6 +346,7 @@ class PuffinExperiment(
 
         /** "Experimental sleep staging (V2)" opt-in (mirrors macOS `PuffinExperiment.experimentalSleepV2Key`). */
         const val KEY_EXPERIMENTAL_SLEEP_V2 = "noopExperimentalSleepV2"
+        const val KEY_ONSET_WAKE_EXPERIMENT = "noopExperimentalOnsetWake"
 
         /** "HR-from-PPG sub-lag interpolation" opt-in (mirrors macOS `PuffinExperiment.ppgHrSubLagInterpKey`). */
         const val KEY_PPG_HR_SUBLAG_INTERP = "noopPpgHrSubLagInterp"

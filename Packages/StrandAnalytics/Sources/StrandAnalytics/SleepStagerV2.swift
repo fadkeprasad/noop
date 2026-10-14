@@ -38,7 +38,8 @@ public enum SleepStagerV2 {
     /// consumed — respiration regularity is recovered from the R-R stream (RSA), the path available on both
     /// WHOOP 4 and 5. The recipe stages "wake" naturally (no separate pre-onset / post-wake forcing).
     public static func stageSession(start: Int, end: Int, grav: [GravitySample],
-                                    hr: [HRSample], rr: [RRInterval], resp: [RespSample]) -> [StageSegment] {
+                                    hr: [HRSample], rr: [RRInterval], resp: [RespSample],
+                                    useOnsetWakeExperiment: Bool = false) -> [StageSegment] {
         // v7.0.2 perf (#707): stage each night AT MOST ONCE per (window, input-fingerprint). The post-sync
         // scoring loop and the self-heal restage call this with byte-identical streams across passes; without
         // the cache each call re-allocates the large per-second HR/gravity dictionaries below before
@@ -86,9 +87,11 @@ public enum SleepStagerV2 {
                 StreamFingerprint.gravityQuant(x: $0.x, y: $0.y, z: $0.z)
             }),
             hr: StreamFingerprint.of(hrW, ts: { $0.ts }, quant: { Int($0.bpm) }),
-            rr: StreamFingerprint.of(rrW, ts: { $0.ts }, quant: { Int($0.rrMs) }))
+            rr: StreamFingerprint.of(rrW, ts: { $0.ts }, quant: { Int($0.rrMs) }),
+            useOnsetWakeExperiment: useOnsetWakeExperiment)
         return stageCache.value(key) {
-            stageSessionUncached(start: start, end: end, grav: gravW, hr: hrW, rr: rrW, resp: resp)
+            stageSessionUncached(start: start, end: end, grav: gravW, hr: hrW, rr: rrW, resp: resp,
+                                 useOnsetWakeExperiment: useOnsetWakeExperiment)
         }
     }
 
@@ -122,6 +125,7 @@ public enum SleepStagerV2 {
     private struct V2Key: Hashable {
         let start: Int; let end: Int
         let grav: StreamFingerprint; let hr: StreamFingerprint; let rr: StreamFingerprint
+        let useOnsetWakeExperiment: Bool
     }
 
     /// ≈ a couple of weeks of distinct nights (incl. re-staged edits); FIFO-evicted, result-only.
@@ -130,11 +134,12 @@ public enum SleepStagerV2 {
     /// The unchanged staging recipe. Split out verbatim from `stageSession` so the public entry can memoize
     /// in front of it; behaviour is byte-identical (a cache miss runs exactly this).
     private static func stageSessionUncached(start: Int, end: Int, grav: [GravitySample],
-                                             hr: [HRSample], rr: [RRInterval], resp: [RespSample]) -> [StageSegment] {
+                                             hr: [HRSample], rr: [RRInterval], resp: [RespSample],
+                                             useOnsetWakeExperiment: Bool) -> [StageSegment] {
         // The public veneer has already established stable timestamp order before clipping.
         let feats = features(start: start, end: end, grav: grav, hr: hr, rr: rr)
         if feats.isEmpty { return [StageSegment(start: start, end: end, stage: "light")] }
-        let labels = stageEpochs(feats)
+        let labels = stageEpochs(feats, useOnsetWakeExperiment: useOnsetWakeExperiment)
 
         // Tile [start, end] with one segment per staged epoch. The first segment back-fills [start, firstEpoch)
         // and the last extends to `end`; an interior coverage gap is carried by the preceding label. "awake"
@@ -589,7 +594,7 @@ public enum SleepStagerV2 {
     /// one Viterbi over an already-built lattice, not a second featurisation, and `stageSession` memoizes the
     /// whole thing anyway. When no sustained run exists the origin falls back to the window start, which is
     /// exactly the origin the shipped `c`-based guard used.
-    static func stageEpochs(_ feats: [Epoch]) -> [String] {
+    static func stageEpochs(_ feats: [Epoch], useOnsetWakeExperiment: Bool = false) -> [String] {
         if feats.isEmpty { return [] }
 
         // Per-night z-score over the present values (population std; 0 std → 1 so a flat channel is neutral).
@@ -617,7 +622,7 @@ public enum SleepStagerV2 {
 
         var seq: [[String: Double]] = []
         seq.reserveCapacity(feats.count)
-        for f in feats {
+        for (index, f) in feats.enumerated() {
             let zhrv = zhr(f.hr), zhvv = zhv(f.hrVar), zmvv = zmv(f.moveFrac)
             let gate = deepGateSlope * max(0.0, fpct(f.hrFlat11) - deepGateThresh)
             // Cardiac contribution to the AWAKE emission. On a motion-quiescent epoch the wrist did not move,
@@ -626,7 +631,14 @@ public enum SleepStagerV2 {
             // upstream's restored (post-#437) cardiac coefficients verbatim, so a night with any motion stages
             // byte-identical to upstream; the correction only ever holds a still, elevated-HR epoch.
             let awakeCardiac0 = 0.8 * zhvv + 0.4 * zhrv
-            let awakeCardiac = motionQuiescent(f) ? min(0.0, awakeCardiac0) : awakeCardiac0
+            // Experimental onset-only guard: after repeated movement bursts in the preceding ten minutes,
+            // retain positive cardiac wake evidence during the next quiet epoch. The shipped rule clamps it
+            // everywhere; this bounded exception tests whether in-bed position changes can corroborate a
+            // still-but-awake settling interval without treating every overnight turn as wake.
+            let onsetWindow = useOnsetWakeExperiment && f.minutesSinceOnset >= 0 && f.minutesSinceOnset < 90
+            let motionCorroborated = onsetWindow && recentTurnCount(feats, through: index) >= 2
+            let awakeCardiac = motionQuiescent(f) && !motionCorroborated
+                ? min(0.0, awakeCardiac0) : awakeCardiac0
             var em: [String: Double] = [
                 "deep": -1.1 * zhvv - 0.5 * zmvv - gate + baseLogPrior["deep"]!,
                 "rem": 0.6 * zhvv - 0.6 * zmvv + 0.4 * zhrv + baseLogPrior["rem"]!,
@@ -637,6 +649,15 @@ public enum SleepStagerV2 {
             let pr = cyclePrior(f.clock, .infinity)
             for s in stageNames { em[s]! += pr[s]! }
             if f.jerkMax > f.jerkScale * jerkFloorGateMult { em["awake"]! += motionGateBoost }
+            // Offline onset estimate: if the first ten minutes already contain repeated turns, bias the
+            // initial Viterbi state toward wake. This lets the candidate window retain an awake prefix
+            // instead of letting its uniform start erase the settling interval before later evidence arrives.
+            if useOnsetWakeExperiment && index == 0 && recentTurnCount(feats, through: min(feats.count - 1, 19)) >= 2 {
+                em["awake"]! += motionGateBoost
+            }
+            if motionCorroborated && motionQuiescent(f) && awakeCardiac0 > 0.2 {
+                em["awake"]! += motionGateBoost
+            }
             if let rg = f.respReg { let z = zrg(rg); em["deep"]! += respWeight * z; em["rem"]! -= respWeight * z }
             seq.append(em)
         }
@@ -652,5 +673,16 @@ public enum SleepStagerV2 {
             seq[i]["rem"]! -= remLatencyGuard(feats[i].minutesSinceOnset - originMin)
         }
         return viterbi(seq)
+    }
+
+    /// Count the stager's existing jerk wake-gate events over the preceding ten minutes, including this epoch.
+    /// `minutesSinceOnset` is measured from the candidate window start; this helper never reads uncovered rows.
+    static func recentTurnCount(_ feats: [Epoch], through index: Int) -> Int {
+        guard feats.indices.contains(index) else { return 0 }
+        let lo = max(0, index - 19) // 20 × 30 s epochs
+        return (lo...index).reduce(0) { count, i in
+            let f = feats[i]
+            return count + (f.jerkMax > f.jerkScale * jerkFloorGateMult ? 1 : 0)
+        }
     }
 }

@@ -433,6 +433,7 @@ public enum AnalyticsEngine {
                                   // `PuffinExperiment.experimentalSleepV2Enabled`, which is default ON
                                   // (#277/#351), so the shipped app stages with V2. (7.0.0)
                                   useSleepStagerV2: Bool = false,
+                                  useOnsetWakeExperiment: Bool = false,
                                   // Opt-in motion-aware wake refinement (#364 "Proposal 2" follow-up; density
                                   // gate precedent #345). When true, `WakeMotionRefinement` re-derives each
                                   // detected session's stages, reclassifying a hot-but-still WAKE segment to
@@ -508,6 +509,7 @@ public enum AnalyticsEngine {
                                                   tzOffsetSeconds: tzOffsetSeconds, wristOff: wristOff,
                                                   bandSleepState: bandSleepState,
                                                   useSleepStagerV2: useSleepStagerV2,
+                                                  useOnsetWakeExperiment: useOnsetWakeExperiment,
                                                   traceSink: traceSink)
         // Motion-aware wake refinement (#364 follow-up) runs AFTER V1/V2 staging, over every detected
         // session (naps included — the same eligibility gates apply). `steps` is the SAME calendar-day/

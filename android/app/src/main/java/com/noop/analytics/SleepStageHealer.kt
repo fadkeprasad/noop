@@ -60,6 +60,7 @@ object SleepStageHealer {
         // SleepStagerV2; else V1. This PARAMETER defaults false so existing callers / tests are unaffected
         // — the stored preference the app threads in is default TRUE, so the shipped app gets V2. (V7 3b)
         useExperimentalSleepV2: Boolean = false,
+        useOnsetWakeExperiment: Boolean = false,
         // Opt-in motion-aware wake refinement (#364 "Proposal 2" follow-up; density gate precedent #345).
         // Same Context-free threading as [useExperimentalSleepV2]; default false so existing callers/tests
         // are unaffected. Runs AFTER whichever stager above just ran and self-gates on the night's OWN
@@ -82,7 +83,13 @@ object SleepStageHealer {
         )
         // Only read when the refinement might actually use it — no point paying for it on the (default) off path.
         val steps = if (useMotionAwareWake) repo.stepSamples(deviceId, lo, hi, IntelligenceEngine.STREAM_LIMIT) else emptyList()
-        return restageFromSamples(start, end, grav, hr, rr, resp, useExperimentalSleepV2, steps, useMotionAwareWake)
+        val band = if (useExperimentalSleepV2 && useOnsetWakeExperiment) {
+            repo.sleepStateSamples(deviceId, lo, hi, IntelligenceEngine.STREAM_LIMIT).map { it.ts to it.state }
+        } else emptyList()
+        return restageFromSamples(
+            start, end, grav, hr, rr, resp, useExperimentalSleepV2,
+            useOnsetWakeExperiment, steps, useMotionAwareWake, band,
+        )
     }
 
     /**
@@ -116,6 +123,8 @@ object SleepStageHealer {
         // Opt-in experimental staging: V2 cardiorespiratory recipe when true, else default V1 (default false
         // so existing callers / tests stay on V1 — the V1 path is byte-identical). (V7 Pillar 3b)
         useExperimentalSleepV2: Boolean = false,
+        // Separate default-off onset experiment, applied only inside V2.
+        useOnsetWakeExperiment: Boolean = false,
         // Step stream for the motion-aware wake refinement below. Default empty keeps every existing
         // positional caller/test byte-identical (the refinement is a no-op with no steps either way).
         steps: List<StepSample> = emptyList(),
@@ -123,14 +132,20 @@ object SleepStageHealer {
         // just ran, reclassifying a hot-but-still wake segment to light. Default false, self-gated on
         // observed density either way — see [WakeMotionRefinement].
         useMotionAwareWake: Boolean = false,
+        bandSleepState: List<Pair<Long, Int>> = emptyList(),
     ): String? {
         if (!isDense(grav, start, end)) return null
         val segs = if (useExperimentalSleepV2) {
-            SleepStagerV2.stageSession(start = start, end = end, grav = grav, hr = hr, rr = rr, resp = resp)
+            SleepStagerV2.stageSession(
+                start = start, end = end, grav = grav, hr = hr, rr = rr, resp = resp,
+                useOnsetWakeExperiment = useOnsetWakeExperiment,
+            )
         } else {
             SleepStager.stageSession(start = start, end = end, grav = grav, hr = hr, rr = rr, resp = resp)
         }
-        val refined = WakeMotionRefinement.apply(segs, grav, steps, useMotionAwareWake)
+        val onsetAdjusted = SleepStager.applyBandConfirmedOnset(segs, start, end, bandSleepState,
+            enabled = useExperimentalSleepV2 && useOnsetWakeExperiment)
+        val refined = WakeMotionRefinement.apply(onsetAdjusted, grav, steps, useMotionAwareWake)
         return AnalyticsEngine.encodeStages(refined)
     }
 
@@ -157,6 +172,7 @@ object SleepStageHealer {
         // Context-aware caller). This PARAMETER defaults false so callers/tests that don't pass it are
         // unaffected; the stored preference is default TRUE, so the shipped app gets V2. (3b)
         useExperimentalSleepV2: Boolean = false,
+        useOnsetWakeExperiment: Boolean = false,
         // Opt-in motion-aware wake refinement (#364 follow-up), threaded the same way. Default false.
         useMotionAwareWake: Boolean = false,
     ): List<SleepSession> {
@@ -171,7 +187,7 @@ object SleepStageHealer {
             // STRAP id (where the sensor streams live), not the computed namespace. Skip when the raw
             // isn't dense yet, or when the result already matches what's stored (steady state — no write).
             val newJSON = restageFromRaw(repo, strapDeviceId, row.effectiveStartTs, row.endTs,
-                useExperimentalSleepV2, useMotionAwareWake) ?: continue
+                useExperimentalSleepV2, useOnsetWakeExperiment, useMotionAwareWake) ?: continue
             if (newJSON == row.stagesJSON) continue
             // Keyed by the IMMUTABLE detected startTs (never effectiveStartTs) so it lands on the right
             // primary-key row; the DAO scopes the write to userEdited = 1.

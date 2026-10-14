@@ -112,13 +112,27 @@ internal fun selectNight(
     // nightOnsetTs / synth.startTs), closed by the group's latest wake. `session` stays the edit anchor only.
     val heroOnsetTs = heroGroup.firstOrNull()?.effectiveStartTs ?: session.effectiveStartTs
     val heroWakeTs = heroGroup.maxOfOrNull { it.endTs } ?: session.endTs
+    // Keep the rest-window/chart anchor above, but derive the Asleep clock from actual timestamped
+    // stages. Imported aggregate-only nights and timelines without a five-minute covered sleep run
+    // fall back to the window onset instead of receiving a fabricated estimate.
+    val timestampedStages = groupSegments ?: heroGroup.flatMap {
+        parsePersistedSegments(SleepStageTotals.clampStagesToOnset(it.stagesJSON, it.effectiveStartTs)).orEmpty()
+    }.sortedBy { it.start }
+    val estimatedSleepOnsetTs = estimateSleepOnsetTs(timestampedStages)
     // #561: whole-group time-in-bed (minutes) — fragment windows summed, gaps excluded — so the hero
     // subtitle matches the multi-fragment stage total it is shown with. Single-block days stay null.
     val groupInBedMin = if (heroGroup.size > 1) {
         heroGroup.sumOf { (it.endTs - it.effectiveStartTs).coerceAtLeast(0L) } / 60.0
     } else null
     return HeroNight(session, dayKey, segments, clockLabelFor(heroOnsetTs, heroWakeTs, is24h), napBlocks, groupStages,
-        groupSegments, groupMotion, groupInBedMin, heroOnsetTs, heroWakeTs, heroGroup)
+        groupSegments, groupMotion, groupInBedMin, heroOnsetTs, heroWakeTs, heroGroup, estimatedSleepOnsetTs)
+}
+
+/** First epoch of a continuously covered five-minute non-wake run; unknown labels/gaps reset the run. */
+internal fun estimateSleepOnsetTs(segments: List<PersistedSegment>): Long? {
+    return com.noop.analytics.SleepOnsetEstimate.timestamp(segments.map {
+        com.noop.analytics.StageSegment(it.start, it.end, it.stage)
+    })
 }
 
 /**

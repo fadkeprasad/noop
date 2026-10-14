@@ -87,6 +87,7 @@ struct SettingsView: View {
     /// cardiorespiratory recipe) instead of the older V1 stager. Read at the staging call site in
     /// `Repository`. See [PuffinExperiment.experimentalSleepV2Key].
     @AppStorage(PuffinExperiment.experimentalSleepV2Key) private var experimentalSleepV2Enabled = true
+    @AppStorage(PuffinExperiment.onsetWakeKey) private var onsetWakeExperimentEnabled = false
 
     /// "Motion-aware wake refinement" (#364 follow-up, OFF by default). A post-pass over the already-staged
     /// hypnogram: reclassifies a scored WAKE segment to `light` when its per-minute step-tick cadence shows
@@ -1941,6 +1942,19 @@ struct SettingsView: View {
                 .toggleStyle(.switch)
                 .tint(StrandPalette.accent)
                 Text("A transparent cardiorespiratory recipe that recovers deep and REM better than the older V1 staging, and is now the default. It only changes how already-detected nights are split into stages (detection and scores are unchanged); turn it off to fall back to V1. Takes effect on the next nights staged.")
+                    .font(StrandFont.caption)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                rowDivider
+                Toggle(isOn: $onsetWakeExperimentEnabled) {
+                    Text("Experimental onset wake corroboration")
+                        .font(StrandFont.subhead)
+                        .foregroundStyle(StrandPalette.textPrimary)
+                }
+                .toggleStyle(.switch)
+                .tint(StrandPalette.accent)
+                Text("Tests whether repeated movement before sleep helps identify awake time while settling. Experimental; off by default and limited to the first 90 minutes of a detected window.")
                     .font(StrandFont.caption)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)

@@ -381,6 +381,7 @@ object AnalyticsEngine {
         // PuffinExperiment.from(context).experimentalSleepV2, which is default TRUE (#277/#351), so the
         // shipped app stages with V2. Mirrors Swift. (7.0.0)
         useSleepStagerV2: Boolean = false,
+        useOnsetWakeExperiment: Boolean = false,
         // Opt-in motion-aware wake refinement (#364 "Proposal 2" follow-up; density gate precedent #345).
         // When true, [WakeMotionRefinement] re-derives each detected session's stages, reclassifying a
         // hot-but-still WAKE segment to `light` when it shows no locomotion and a stable posture outside
@@ -437,6 +438,7 @@ object AnalyticsEngine {
             hr = hr, rr = rr, resp = resp, gravity = gravity, tzOffsetSeconds = tzOffsetSeconds,
             wristOff = wristOff, bandSleepState = bandSleepState,
             useSleepStagerV2 = useSleepStagerV2,
+            useOnsetWakeExperiment = useOnsetWakeExperiment,
             traceSink = traceSink,
         )
         // Motion-aware wake refinement (#364 follow-up) runs AFTER V1/V2 staging, over every detected

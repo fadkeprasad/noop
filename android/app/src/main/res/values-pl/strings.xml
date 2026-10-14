@@ -2876,4 +2876,10 @@
     <string name="raw_diag_ecg_probe_running">Na tym pasku może nadal trwać zapis. Werdykt trafia do strap log.</string>
     <string name="today_customize_live_session_availability">Pojawia się dzisiaj, gdy sesje na żywo są włączone w Ustawieniach lub trwa sesja.</string>
     <string name="l10n_app_changelog_today_your_way_heart_rate_any_5e1308b3">Dziś po swojemu, tętno dostępne dla każdej aplikacji i język włoski</string>
+    <string name="l10n_sleep_screen_estimated_onset_6a4c1f20">Szacowany początek snu</string>
+    <string name="l10n_sleep_screen_estimated_onset_woke_a11y_42b8d5e3">Szacowany początek snu %1$s, pobudka o %2$s</string>
+    <string name="l10n_sleep_screen_window_start_4c83d2a0">Początek okna snu</string>
+    <string name="l10n_sleep_screen_window_start_woke_a11y_2fe7b3c1">Początek okna snu %1$s, koniec o %2$s</string>
+    <string name="l10n_settings_onset_wake_experiment_7dd6c082">Eksperymentalne wykrywanie czuwania przed snem</string>
+    <string name="l10n_settings_onset_wake_experiment_help_4bb32571">Sprawdza, czy powtarzające się ruchy przed snem pomagają wykryć czas czuwania podczas zasypiania. Funkcja eksperymentalna, domyślnie wyłączona i ograniczona do pierwszych 90 minut wykrytego okna.</string>
 </resources>

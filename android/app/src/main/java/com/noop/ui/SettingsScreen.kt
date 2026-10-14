@@ -675,6 +675,7 @@ fun SettingsScreen(
     // "Sleep staging (V2)" — V2 is the DEFAULT for every strap (WHOOP 4 and 5/MG); turn it OFF to fall back
     // to V1. Model-agnostic, so it lives outside the 5/MG-only card. 4.0 is unvalidated either way (#319/#347).
     var experimentalSleepV2 by remember { mutableStateOf(puffinExperiment.experimentalSleepV2) }
+    var onsetWakeExperiment by remember { mutableStateOf(puffinExperiment.onsetWakeExperiment) }
     // "Motion-aware wake refinement" (#364 follow-up) — OFF by default. Self-gates on observed gravity +
     // step density, so it is a no-op on a sparse (e.g. WHOOP 4.0) night regardless of this switch.
     var motionAwareWake by remember { mutableStateOf(puffinExperiment.motionAwareWake) }
@@ -3134,6 +3135,21 @@ fun SettingsScreen(
                     style = NoopType.caption,
                     color = Palette.textTertiary,
                 )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Text(uiString(R.string.l10n_settings_onset_wake_experiment_7dd6c082), style = NoopType.subhead,
+                        color = Palette.textPrimary, modifier = Modifier.weight(1f))
+                    Switch(checked = onsetWakeExperiment, onCheckedChange = {
+                        onsetWakeExperiment = it
+                        puffinExperiment.onsetWakeExperiment = it
+                    })
+                }
+                Text(uiString(R.string.l10n_settings_onset_wake_experiment_help_4bb32571),
+                    style = NoopType.caption, color = Palette.textTertiary)
 
                 // --- Motion-aware wake refinement (#364 follow-up) — OFF by default. ---
                 Row(

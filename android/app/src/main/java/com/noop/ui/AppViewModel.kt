@@ -1293,6 +1293,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         // layer is Context-free) and thread it into the sleep self-heal. The preference is
                         // default TRUE, so this normally passes V2. (V7 3b)
                         useExperimentalSleepV2 = PuffinExperiment.from(appContext).experimentalSleepV2,
+                        useOnsetWakeExperiment = PuffinExperiment.from(appContext).onsetWakeExperiment,
                         // Opt-in motion-aware wake refinement (#364 follow-up) — same Context-free threading.
                         useMotionAwareWake = PuffinExperiment.from(appContext).motionAwareWake,
                         // Sleep & Rest test mode (Test Centre E5): when the SLEEP domain is on, route the
@@ -1971,7 +1972,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      *  Swift SleepView's analyzeRecent() after addManualNap. Swallows persist failures; the Sleep screen
      *  recomputes from the persisted rows on its next reload. */
     suspend fun addManualNap(startTs: Long, endTs: Long) {
-        runCatching { repository.addManualNap(deviceId, startTs, endTs) }
+        runCatching {
+            repository.addManualNap(
+                deviceId, startTs, endTs,
+                useOnsetWakeExperiment = PuffinExperiment.from(appContext).onsetWakeExperiment,
+                useExperimentalSleepV2 = PuffinExperiment.from(appContext).experimentalSleepV2,
+            )
+        }
         rescoreAfterEdit()
     }
 
@@ -2050,6 +2057,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // Experimental sleep staging (V2) — same flag the 15-min loop reads (default TRUE), so a
                 // manual re-score after an edit stages with the same engine the user chose. (V7 Pillar 3b)
                 useExperimentalSleepV2 = PuffinExperiment.from(appContext).experimentalSleepV2,
+                useOnsetWakeExperiment = PuffinExperiment.from(appContext).onsetWakeExperiment,
                 // Opt-in motion-aware wake refinement (#364 follow-up) — same flag the 15-min loop reads.
                 useMotionAwareWake = PuffinExperiment.from(appContext).motionAwareWake,
                 // #103: SpO₂ candidate @82 display toggle — same flag the 15-min loop reads.

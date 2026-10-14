@@ -2828,4 +2828,10 @@
     <string name="raw_diag_ecg_probe_running">Una acquisizione potrebbe essere ancora attiva su questo strap. Il verdetto va nello strap log.</string>
     <string name="today_customize_live_session_availability">Compare oggi se le sessioni in diretta sono attivate nelle Impostazioni o una sessione è attiva.</string>
     <string name="l10n_app_changelog_today_your_way_heart_rate_any_5e1308b3">Oggi a modo tuo, frequenza cardiaca leggibile da ogni app e l\'italiano</string>
+    <string name="l10n_sleep_screen_estimated_onset_6a4c1f20">Inizio stimato del sonno</string>
+    <string name="l10n_sleep_screen_estimated_onset_woke_a11y_42b8d5e3">Inizio stimato del sonno alle %1$s, risveglio alle %2$s</string>
+    <string name="l10n_sleep_screen_window_start_4c83d2a0">Inizio della finestra del sonno</string>
+    <string name="l10n_sleep_screen_window_start_woke_a11y_2fe7b3c1">Inizio della finestra del sonno alle %1$s, risveglio alle %2$s</string>
+    <string name="l10n_settings_onset_wake_experiment_7dd6c082">Rilevamento sperimentale della veglia all’inizio del sonno</string>
+    <string name="l10n_settings_onset_wake_experiment_help_4bb32571">Verifica se i movimenti ripetuti prima di dormire aiutano a identificare il tempo di veglia durante l’assestamento. Sperimentale, disattivato per impostazione predefinita e limitato ai primi 90 minuti della finestra rilevata.</string>
 </resources>

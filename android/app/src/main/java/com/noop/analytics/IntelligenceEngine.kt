@@ -124,6 +124,9 @@ object IntelligenceEngine {
 
     // Guarded by analyzeGate; kept as state to avoid another parameter on the bytecode-budgeted pass.
     private var preserveUnscoredHistoryForRun = false
+    // Guarded by analyzeGate for the same reason: analyzeRecentOnCpu has essentially no parameter/local
+    // headroom under the JaCoCo method-size ceiling. The wrapper sets this once for both scoring passes.
+    private var onsetWakeExperimentForRun = false
 
     /** One reused night: its per-day cache [key], the scored [res], and everything the pass-1 loop otherwise
      *  writes into function-scoped per-day maps that pass 2 reads (owner/hrRows/primary-session RHR/SpO₂
@@ -439,6 +442,7 @@ object IntelligenceEngine {
         // defaults false only so existing callers / tests are unaffected; it is not the product default.
         // (V7 Pillar 3b)
         useExperimentalSleepV2: Boolean = false,
+        useOnsetWakeExperiment: Boolean = false,
         // Opt-in "Motion-aware wake refinement" flag (#364 "Proposal 2" follow-up; density gate precedent
         // #345). Same Context-free threading as [useExperimentalSleepV2]: the Context-aware caller reads
         // PuffinExperiment.from(context).motionAwareWake and passes it down to AnalyticsEngine.analyzeDay
@@ -521,6 +525,7 @@ object IntelligenceEngine {
             // wrapper, never in `analyzeRecentOnCpu`, whose ratchet margin has no room for either.
             StoreProbeTally.reset()
             preserveUnscoredHistoryForRun = preserveUnscoredHistory
+            onsetWakeExperimentForRun = useOnsetWakeExperiment
             if (!stepsMotionCacheLoaded && stepsMotionCacheGet != null) {
                 stepsMotionCacheLoaded = true
                 val raw = stepsMotionCacheGet()
@@ -864,7 +869,7 @@ object IntelligenceEngine {
             maxHROverride?.toString() ?: "nil",
             tzOffsetSeconds.toString(), sleepNeedHours.toString(),
             sleepConsistency?.toString() ?: "nil", habitualMidsleepSec?.toString() ?: "nil",
-            useExperimentalSleepV2.toString(), useMotionAwareWake.toString(),
+            useExperimentalSleepV2.toString(), onsetWakeExperimentForRun.toString(), useMotionAwareWake.toString(),
             deepHrvWindow.toString(), spo2CandidateDisplay.toString(),
             // #1545: MUST be here. The Effort recipe changes every day's strain, so a cached scan
             // produced under one method is stale the moment the user switches — serving it would show a
@@ -1193,6 +1198,7 @@ object IntelligenceEngine {
                 // badly UNDER-stage deep/REM (kavemang, #347) — so the toggle is the escape until real 4.0
                 // ground truth settles it (#271/#319). Matches the self-heal restage, which reads the toggle.
                 useSleepStagerV2 = useExperimentalSleepV2,
+                useOnsetWakeExperiment = onsetWakeExperimentForRun,
                 // #364 follow-up: same threading for the motion-aware wake refinement post-pass.
                 useMotionAwareWake = useMotionAwareWake,
                 // #804 Fix A: the owner's own device-provided hypnogram (empty for WHOOP/non-ring days).
@@ -1633,6 +1639,7 @@ object IntelligenceEngine {
             windowStart = windowStart,
             windowEnd = nowSeconds,
             useExperimentalSleepV2 = useExperimentalSleepV2,
+            useOnsetWakeExperiment = onsetWakeExperimentForRun,
             useMotionAwareWake = useMotionAwareWake,
         )
         // #299: [editsByStart] / [editOnsetByStart] are now built PER DAY inside the scoring loop (scoped to

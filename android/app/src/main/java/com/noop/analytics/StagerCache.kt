@@ -53,6 +53,7 @@ internal object StagerCache {
         val hN: Int, val hFirst: Long, val hLast: Long, val hSum: Long,
         val rN: Int, val rFirst: Long, val rLast: Long, val rSum: Long,
         val pN: Int, val pFirst: Long, val pLast: Long, val pSum: Long,
+        val experimentTag: Long,
     )
 
     /**
@@ -67,7 +68,7 @@ internal object StagerCache {
         version: Version,
         start: Long, end: Long,
         grav: List<GravitySample>, hr: List<HrSample>, rr: List<RrInterval>,
-        resp: List<RespSample> = emptyList(),
+        resp: List<RespSample> = emptyList(), experimentTag: Long = 0L,
     ): Key {
         var gSum = 0L; var gFirst = 0L; var gLast = 0L
         if (grav.isNotEmpty()) {
@@ -99,7 +100,7 @@ internal object StagerCache {
             grav.size, gFirst, gLast, gSum,
             hr.size, hFirst, hLast, hSum,
             rr.size, rFirst, rLast, rSum,
-            resp.size, pFirst, pLast, pSum,
+            resp.size, pFirst, pLast, pSum, experimentTag,
         )
     }
 

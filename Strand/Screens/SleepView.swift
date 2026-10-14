@@ -1178,8 +1178,9 @@ struct SleepView: View {
         .accessibilityLabel("Raw on-device stages. This split is the ring's raw on-device classification read over Bluetooth, not the adjusted stages the Oura app shows. Expect more awake and less deep or REM here than in the Oura app for the same night.")
     }
 
-    /// The night's clock window — when you fell asleep and when you woke — as its own clearly
-    /// labelled row. These were previously only in the nav-header's trailing caption, which
+    /// Estimated sleep onset and wake as their own clearly labelled row. The hypnogram remains
+    /// anchored at the detected rest-window start, which is shown when the stage timeline cannot
+    /// support an onset estimate. These times were previously only in the nav-header's trailing caption, which
     /// truncates between the two chevrons on a phone, so in practice the two times people look for
     /// first were effectively hidden. The header now carries just the date span.
     @ViewBuilder
@@ -1189,7 +1190,9 @@ struct SleepView: View {
         NoopCard(padding: NoopMetrics.cardInnerPadding, tint: StrandPalette.restColor) {
             VStack(alignment: .leading, spacing: NoopMetrics.rowSpacing) {
                 HStack(spacing: 0) {
-                    sleepTime(icon: "moon.zzz.fill", label: "Asleep", value: night.onsetText)
+                    sleepTime(icon: "moon.zzz.fill",
+                             label: night.estimatedSleepOnsetDate == nil ? "Window start" : "Est. onset",
+                             value: night.onsetText)
                     Spacer(minLength: 12)
                     Rectangle().fill(StrandPalette.hairline).frame(width: 1, height: 30)
                     Spacer(minLength: 12)

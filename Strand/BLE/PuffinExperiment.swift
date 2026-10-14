@@ -224,6 +224,10 @@ enum PuffinExperiment {
             : UserDefaults.standard.bool(forKey: experimentalSleepV2Key)
     }
 
+    /// Experimental prefix wake corroboration; default OFF until validated across varied onset annotations.
+    static let onsetWakeKey = "noopExperimentalOnsetWake"
+    static var onsetWakeEnabled: Bool { UserDefaults.standard.bool(forKey: onsetWakeKey) }
+
     /// Opt-in "HR-from-PPG sub-lag interpolation" (default off): the v26 optical-PPG gap-fill HR estimator
     /// (`PpgHr`) refines its integer autocorrelation lag with a parabolic (Variant A) interpolation of the
     /// ACF peak, removing the ~±8 bpm lag-quantization near a high HR. Pure opt-in research variant: default

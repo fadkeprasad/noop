@@ -59,14 +59,13 @@ import com.noop.analytics.ClockFormat
 // Extracted from SleepScreen.kt (behavioral no-op; pure UI code-motion).
 
 /**
- * "Asleep / Woke" — the fell-asleep and woke clock times for the navigated night, read off the
- * session's onset (startTs) and wake (endTs) timestamps, each with a moon / sun glyph. Sits in the
- * hero between the night-nav header and the stage card so the two times people glance for first are
- * always visible, not truncated in the header caption. On-brand (surfaceRaised block, tokens) and
- * combined into one TalkBack element. Mirrors iOS SleepView.sleepWindowRow (PR #289).
+ * Estimated sleep onset / wake, each with a moon / sun glyph. When the persisted stage timeline cannot
+ * support an onset estimate, the first label explicitly says "Window start." The chart/edit anchor remains
+ * the detected rest-window onset. Sits in the hero between the night-nav header and stage card, and is
+ * combined into one TalkBack element. Mirrors iOS SleepView.sleepWindowRow.
  */
 @Composable
-internal fun SleepWindowRow(onsetTs: Long, wakeTs: Long) {
+internal fun SleepWindowRow(onsetTs: Long, wakeTs: Long, hasEstimatedOnset: Boolean) {
     // #1821: the reader's chosen clock. Read here rather than threaded, because this is a composable and
     // LocalContext is the idiomatic source; the label helpers stay pure.
     val is24h = ClockPrefs.uses24Hour(LocalContext.current)
@@ -76,13 +75,24 @@ internal fun SleepWindowRow(onsetTs: Long, wakeTs: Long) {
     // same colour world as the rest of the screen. Bevel treatment — content unchanged.
     NoopCard(
         modifier = Modifier.semantics(mergeDescendants = true) {
-            contentDescription = uiString(R.string.l10n_sleep_screen_fell_asleep_at_asleep_woke_at_80465b2d, asleep, woke)
+            contentDescription = uiString(
+                if (hasEstimatedOnset) R.string.l10n_sleep_screen_estimated_onset_woke_a11y_42b8d5e3
+                else R.string.l10n_sleep_screen_window_start_woke_a11y_2fe7b3c1,
+                asleep, woke,
+            )
         },
         padding = Metrics.space14,
         tint = Palette.restColor,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            SleepTime(icon = Icons.Filled.Bedtime, label = uiString(R.string.l10n_sleep_screen_asleep_b9692bbe), value = asleep)
+            SleepTime(
+                icon = Icons.Filled.Bedtime,
+                label = uiString(
+                    if (hasEstimatedOnset) R.string.l10n_sleep_screen_estimated_onset_6a4c1f20
+                    else R.string.l10n_sleep_screen_window_start_4c83d2a0,
+                ),
+                value = asleep,
+            )
             Spacer(Modifier.width(Metrics.space12))
             Box(
                 modifier = Modifier

@@ -1103,6 +1103,64 @@ public enum SleepStager {
 
     // MARK: - Band sleep_state WAKE-veto (recover strap-disputed false wakes)
 
+    /// Default coverage requirements for the experimental leading-onset confirmation. WHOOP 5 emits about
+    /// one state sample per second; require at least 25/30 samples per epoch and ≥80% asleep so gaps or a
+    /// brief state-2 blip cannot establish onset. Ten consecutive 30 s epochs make a five-minute run.
+    static let onsetBandMinSamplesPerEpoch = 25
+    static let onsetBandAsleepFraction = 0.8
+    static let onsetBandConfirmEpochs = 10
+    static let onsetBandMaxLatencyS = 2 * 60 * 60
+
+    /// Experimental, onset-only use of WHOOP's own state-2 signal. When it supplies ten dense, consecutive
+    /// asleep epochs within two hours of the detected window, change earlier non-wake labels to wake up to
+    /// that confirmed boundary. This is gated by the same default-OFF onset experiment as the motion cue.
+    /// Missing/sparse band data, an absent or late confirmation, or a confirmation before NOOP's onset is a
+    /// byte-identical no-op. It never changes the window identity, and does not use state 0/1/3 to infer wake.
+    public static func applyBandConfirmedOnset(_ stages: [StageSegment], start: Int, end: Int,
+                                        bandSleepState: [(ts: Int, state: Int)],
+                                        enabled: Bool = false) -> [StageSegment] {
+        guard enabled, end > start, !stages.isEmpty, !bandSleepState.isEmpty else { return stages }
+        let n = max(1, Int(ceil(Double(end - start) / epochS)))
+        var samples = [[Int]](repeating: [], count: n)
+        for row in bandSleepState where row.ts >= start && row.ts < end {
+            let i = (row.ts - start) / Int(epochS)
+            if i >= 0 && i < n { samples[i].append(row.state) }
+        }
+
+        let runLength = onsetBandConfirmEpochs
+        guard n >= runLength else { return stages }
+        var confirmedOnset: Int?
+        for i in 0...(n - runLength) {
+            let onset = start + i * Int(epochS)
+            if onset - start > onsetBandMaxLatencyS { break }
+            let supported = (i..<(i + runLength)).allSatisfy { index in
+                let epoch = samples[index]
+                guard epoch.count >= onsetBandMinSamplesPerEpoch,
+                      epoch.last == bandStateAsleep else { return false }
+                let asleepCount = epoch.reduce(0) { $0 + ($1 == bandStateAsleep ? 1 : 0) }
+                return Double(asleepCount) / Double(epoch.count) >= onsetBandAsleepFraction
+            }
+            if supported { confirmedOnset = onset; break }
+        }
+        guard let confirmedOnset,
+              let stagedOnset = stages.first(where: { $0.stage != "wake" })?.start,
+              confirmedOnset > stagedOnset else { return stages }
+
+        var out: [StageSegment] = []
+        for segment in stages {
+            guard segment.stage != "wake", segment.start < confirmedOnset,
+                  segment.end > start else { out.append(segment); continue }
+            let prefixEnd = min(segment.end, confirmedOnset)
+            if prefixEnd > segment.start {
+                out.append(StageSegment(start: segment.start, end: prefixEnd, stage: "wake"))
+            }
+            if segment.end > confirmedOnset {
+                out.append(StageSegment(start: confirmedOnset, end: segment.end, stage: segment.stage))
+            }
+        }
+        return out
+    }
+
     // NOOP's cardiorespiratory stager is known to OVER-CALL wake: an EEG-free stager reads a still, low-HR
     // but not-quite-asleep epoch as wake far more often than the wearer was actually awake. WHOOP's OWN
     // per-second sleep-state band (the persisted v18 @81 high-nibble `(sb>>4)&3`: 0 wake/1 still/2 asleep/
@@ -1323,6 +1381,7 @@ public enum SleepStager {
                                    wristOff: [(start: Int, end: Int)] = [],
                                    bandSleepState: [(ts: Int, state: Int)] = [],
                                    useSleepStagerV2: Bool = false,
+                                   useOnsetWakeExperiment: Bool = false,
                                    sleepHRBaseline: Double? = nil,
                                    traceSink: ((String) -> Void)? = nil) -> [SleepSession] {
         // Sleep & Rest test mode only: when a trace is requested we MUST run the live ladder, not a
@@ -1334,6 +1393,7 @@ public enum SleepStager {
             return detectSleepUncached(hr: hr, rr: rr, resp: resp, gravity: gravity,
                                        tzOffsetSeconds: tzOffsetSeconds, wristOff: wristOff,
                                        bandSleepState: bandSleepState, useSleepStagerV2: useSleepStagerV2,
+                                       useOnsetWakeExperiment: useOnsetWakeExperiment,
                                        sleepHRBaseline: sleepHRBaseline, traceSink: traceSink)
         }
         // v7.0.2 perf (#707): the single heaviest analytics call — it sorts the dense full-day gravity
@@ -1356,11 +1416,13 @@ public enum SleepStager {
             wristOff: StreamFingerprint.of(wristOff, ts: { $0.start }, quant: { $0.end }),
             band: StreamFingerprint.of(bandSleepState, ts: { $0.ts }, quant: { $0.state }),
             v2: useSleepStagerV2,
+            onsetWakeExperiment: useOnsetWakeExperiment,
             sleepHRBaseline: sleepHRBaseline)
         return detectSleepCache.value(key) {
             detectSleepUncached(hr: hr, rr: rr, resp: resp, gravity: gravity,
                                 tzOffsetSeconds: tzOffsetSeconds, wristOff: wristOff,
                                 bandSleepState: bandSleepState, useSleepStagerV2: useSleepStagerV2,
+                                useOnsetWakeExperiment: useOnsetWakeExperiment,
                                 sleepHRBaseline: sleepHRBaseline, traceSink: nil)
         }
     }
@@ -1371,6 +1433,7 @@ public enum SleepStager {
         let tz: Int
         let wristOff: StreamFingerprint; let band: StreamFingerprint
         let v2: Bool
+        let onsetWakeExperiment: Bool
         let sleepHRBaseline: Double?
     }
     /// ≈ the number of distinct days in a scoring window; FIFO-evicted, holds only small session arrays.
@@ -1385,6 +1448,7 @@ public enum SleepStager {
                                             wristOff: [(start: Int, end: Int)],
                                             bandSleepState: [(ts: Int, state: Int)],
                                             useSleepStagerV2: Bool,
+                                            useOnsetWakeExperiment: Bool = false,
                                             sleepHRBaseline: Double? = nil,
                                             traceSink: ((String) -> Void)? = nil) -> [SleepSession] {
         let grav = gravity.sorted { $0.ts < $1.ts }
@@ -1578,14 +1642,19 @@ public enum SleepStager {
             }
             let rawStages = useSleepStagerV2
                 ? SleepStagerV2.stageSession(start: p.start, end: p.end, grav: grav,
-                                             hr: hrS, rr: rrS, resp: respS)
+                                             hr: hrS, rr: rrS, resp: respS,
+                                             useOnsetWakeExperiment: useOnsetWakeExperiment)
                 : stageSession(start: p.start, end: p.end, grav: grav,
                                hr: hrS, rr: rrS, resp: respS)
             // Band sleep_state WAKE-veto: recover INTERIOR false-wake epochs the strap's OWN band
             // (`bandSleepState`) scored "asleep". No-op when the band is absent (WHOOP 4.0) or the flag is
             // off; stager-agnostic (corrects whichever hypnogram V1/V2 produced). Efficiency below is then
             // computed on the corrected stages, so a night NOOP over-called wake on reports true efficiency.
-            let stages = applyBandStateWakeVeto(rawStages, start: p.start, end: p.end,
+            let onsetAdjustedStages = useSleepStagerV2 && useOnsetWakeExperiment
+                ? applyBandConfirmedOnset(rawStages, start: p.start, end: p.end,
+                                          bandSleepState: bandSleepState, enabled: true)
+                : rawStages
+            let stages = applyBandStateWakeVeto(onsetAdjustedStages, start: p.start, end: p.end,
                                                 bandSleepState: bandSleepState)
             let eff = efficiency(start: p.start, end: p.end, stages: stages)
             let avgHrv = sessionAvgHRV(start: p.start, end: p.end, rr: rrS)

@@ -1272,6 +1272,63 @@ object SleepStager {
         return asleep.toDouble() / inBlock.size.toDouble() >= morningReonsetBandAsleepFrac
     }
 
+    // ── Experimental band-confirmed leading onset ────────────────────────────
+
+    /**
+     * Experimental onset-only use of WHOOP state 2. Require ten consecutive 30 s epochs, each with at least
+     * 25 samples and at least 80% state-2 readings, within two hours of the detected window. Then reclassify
+     * earlier non-wake labels to wake. Missing/sparse band data or no timely confirmation is a no-op. This
+     * never treats state 0/1/3 as wake and runs only under the default-OFF onset experiment.
+     * Mirrors Swift `applyBandConfirmedOnset`.
+     */
+    internal fun applyBandConfirmedOnset(
+        stages: List<StageSegment>, start: Long, end: Long,
+        bandSleepState: List<Pair<Long, Int>>,
+        enabled: Boolean = false,
+    ): List<StageSegment> {
+        if (!enabled || end <= start || stages.isEmpty() || bandSleepState.isEmpty()) return stages
+        val step = epochS.toLong()
+        val n = maxOf(1, ceil((end - start).toDouble() / epochS).toInt())
+        val samples = Array(n) { mutableListOf<Int>() }
+        for ((ts, state) in bandSleepState) {
+            if (ts < start || ts >= end) continue
+            val i = ((ts - start) / step).toInt()
+            if (i in 0 until n) samples[i].add(state)
+        }
+        val runLength = 10
+        if (n < runLength) return stages
+        val maxLatency = 2 * 60 * 60L
+        var confirmedOnset: Long? = null
+        for (i in 0..(n - runLength)) {
+            val onset = start + i * step
+            if (onset - start > maxLatency) break
+            val supported = (i until i + runLength).all { index ->
+                val epoch = samples[index]
+                epoch.size >= 25 && epoch.lastOrNull() == bandStateAsleep &&
+                    epoch.count { it == bandStateAsleep }.toDouble() / epoch.size >= 0.8
+            }
+            if (supported) {
+                confirmedOnset = onset
+                break
+            }
+        }
+        val onset = confirmedOnset ?: return stages
+        val stagedOnset = stages.firstOrNull { it.stage != "wake" }?.start ?: return stages
+        if (onset <= stagedOnset) return stages
+
+        val out = ArrayList<StageSegment>()
+        for (s in stages) {
+            if (s.stage == "wake" || s.start >= onset || s.end <= start) {
+                out.add(s)
+                continue
+            }
+            val prefixEnd = minOf(s.end, onset)
+            if (prefixEnd > s.start) out.add(StageSegment(s.start, prefixEnd, "wake"))
+            if (s.end > onset) out.add(StageSegment(onset, s.end, s.stage))
+        }
+        return out
+    }
+
     // ── Band sleep_state WAKE-veto (recover strap-disputed false wakes) ───────
     //
     // NOOP's cardiorespiratory stager is known to OVER-CALL wake: an EEG-free stager reads a still, low-HR
@@ -1442,7 +1499,7 @@ object SleepStager {
     /** Full memo key for [detectSleep] — every input that steers detection or staging, nothing else. */
     private data class DetectKey(
         val grav: Long, val hr: Long, val rr: Long, val resp: Long,
-        val tz: Long, val wristOff: Long, val band: Long, val v2: Boolean,
+        val tz: Long, val wristOff: Long, val band: Long, val v2: Boolean, val onsetWakeExperiment: Boolean,
         val sleepHRBaseline: Double?,
     )
 
@@ -1514,6 +1571,7 @@ object SleepStager {
         // #277, extended to every strap family in #351), so a normal user's nights are staged by V2.
         // Mirrors Swift.
         useSleepStagerV2: Boolean = false,
+        useOnsetWakeExperiment: Boolean = false,
         // Motion-corroborated wake (#462, directive b): the wearer's PERSONALISED overnight HR band
         // ([adaptiveOvernightHRBaseline]), used by [confirmSleepWithHR] in place of the day-median so a
         // supplement / fitness era self-calibrates the sleep band. Default null keeps the day-median
@@ -1531,7 +1589,7 @@ object SleepStager {
         // Swift detectSleep traceSink bypass (#707).
         if (traceSink != null) {
             return detectSleepUncached(hr, rr, resp, gravity, tzOffsetSeconds, wristOff,
-                bandSleepState, useSleepStagerV2, sleepHRBaseline, traceSink)
+                bandSleepState, useSleepStagerV2, useOnsetWakeExperiment, sleepHRBaseline, traceSink)
         }
         val key = DetectKey(
             // Fold the three gravity axes SEPARATELY (raw IEEE-754 bits, like StagerCache.fingerprint)
@@ -1552,6 +1610,7 @@ object SleepStager {
             wristOff = streamFingerprint(wristOff, { it.first }) { it.second },
             band = streamFingerprint(bandSleepState, { it.first }) { it.second.toLong() },
             v2 = useSleepStagerV2,
+            onsetWakeExperiment = useOnsetWakeExperiment,
             sleepHRBaseline = sleepHRBaseline,
         )
         synchronized(detectCacheLock) { detectCache[key] }?.let { return copyDetected(it) }
@@ -1559,7 +1618,7 @@ object SleepStager {
         // serialises another thread's lookup, and a racing duplicate compute just overwrites the entry
         // with an identical value — benign, the function is deterministic.
         val sessions = detectSleepUncached(hr, rr, resp, gravity, tzOffsetSeconds, wristOff,
-            bandSleepState, useSleepStagerV2, sleepHRBaseline, null)
+            bandSleepState, useSleepStagerV2, useOnsetWakeExperiment, sleepHRBaseline, null)
         synchronized(detectCacheLock) { detectCache[key] = copyDetected(sessions) }
         return sessions
     }
@@ -1575,6 +1634,7 @@ object SleepStager {
         wristOff: List<Pair<Long, Long>>,
         bandSleepState: List<Pair<Long, Int>>,
         useSleepStagerV2: Boolean,
+        useOnsetWakeExperiment: Boolean,
         sleepHRBaseline: Double?,
         traceSink: ((String) -> Unit)?,
     ): List<DetectedSleep> {
@@ -1759,16 +1819,19 @@ object SleepStager {
             }
             val rawStages = if (useSleepStagerV2) {
                 SleepStagerV2.stageSession(start = p.start, end = p.end, grav = grav,
-                    hr = hrS, rr = rrS, resp = respS)
+                    hr = hrS, rr = rrS, resp = respS, useOnsetWakeExperiment = useOnsetWakeExperiment)
             } else {
                 stageSession(start = p.start, end = p.end, grav = grav,
                     hr = hrS, rr = rrS, resp = respS)
             }
+            val onsetAdjustedStages = if (useSleepStagerV2 && useOnsetWakeExperiment) {
+                applyBandConfirmedOnset(rawStages, p.start, p.end, bandSleepState, enabled = true)
+            } else rawStages
             // Band sleep_state WAKE-veto: recover INTERIOR false-wake epochs the strap's OWN band
             // ([bandSleepState]) scored "asleep". No-op when the band is absent (WHOOP 4.0) or the flag is
             // off; stager-agnostic (corrects whichever hypnogram V1/V2 produced). Efficiency below is then
             // computed on the corrected stages, so a night NOOP over-called wake on reports true efficiency.
-            val stages = applyBandStateWakeVeto(rawStages, start = p.start, end = p.end,
+            val stages = applyBandStateWakeVeto(onsetAdjustedStages, start = p.start, end = p.end,
                 bandSleepState = bandSleepState)
             val eff = efficiency(start = p.start, end = p.end, stages = stages)
             val avgHrv = sessionAvgHRV(start = p.start, end = p.end, rr = rrS)

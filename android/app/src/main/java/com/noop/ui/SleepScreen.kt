@@ -805,6 +805,7 @@ fun SleepScreen(
                 nightLabel = nightLabel,
                 onNavigate = { nightOffset = it },
                 session = night?.session,
+                estimatedSleepOnsetTs = night?.estimatedSleepOnsetTs,
                 heroGroup = night?.heroGroup.orEmpty(),
                 onUpdateTimes = { s, start, end ->
                     // #940 belt-and-braces: never apply (optimistically OR durably) a future-ending
@@ -1342,6 +1343,7 @@ private fun Hero(
     nightLabel: String,
     onNavigate: (Int) -> Unit,
     session: SleepSession? = null,
+    estimatedSleepOnsetTs: Long? = null,
     // #1537: the night's HR buckets for the Classic view's heart-rate line, loaded by the caller (which
     // holds the repo) and passed in like every other input here. Empty = nothing to draw.
     nightHr: List<HrBucket> = emptyList(),
@@ -1387,7 +1389,13 @@ private fun Hero(
         // stub, where it's the only thing the hero can say). Mirrors iOS SleepView.sleepWindowRow.
         // #345: the row shows the WHOLE night's window — on a split night the session (edit anchor)
         // ends mid-night and its endTs contradicted the header pill two lines above.
-        session?.let { SleepWindowRow(windowOnsetTs ?: it.effectiveStartTs, windowWakeTs ?: it.endTs) }
+        session?.let {
+            SleepWindowRow(
+                estimatedSleepOnsetTs ?: windowOnsetTs ?: it.effectiveStartTs,
+                windowWakeTs ?: it.endTs,
+                estimatedSleepOnsetTs != null,
+            )
+        }
         if (display == null) {
             // Honest fallback: this night recorded no usable stage data — never silently
             // substitute another night's hypnogram. (#160)

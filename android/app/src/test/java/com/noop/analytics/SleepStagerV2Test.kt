@@ -26,6 +26,20 @@ import kotlin.math.roundToInt
  */
 class SleepStagerV2Test {
 
+    @Test fun onsetWakeExperimentCountsOnlyRecentMotionBursts() {
+        val feats = (0 until 24).map { i ->
+            SleepStagerV2.Epoch(
+                start = 1_700_000_000L + i * 30L, hr = null, hrVar = null, hrFlat11 = null,
+                moveFrac = 0.0, jerkMax = if (i == 2 || i == 18) 0.06 else 0.001,
+                respReg = null, clock = 0.1, jerkScale = 0.001,
+                minutesSinceOnset = i / 2.0,
+            )
+        }
+        assertEquals(2, SleepStagerV2.recentTurnCount(feats, 19))
+        assertEquals(1, SleepStagerV2.recentTurnCount(feats, 23))
+        assertEquals(0, SleepStagerV2.recentTurnCount(feats, -1))
+    }
+
     private val dev = "test"
 
     /** 2025-06-10 00:00:00 UTC — fixed midnight, as in the other stager tests. */

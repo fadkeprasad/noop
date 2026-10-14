@@ -71,6 +71,22 @@ struct Night {
     /// The wall-clock start of the night (for the Hypnogram's clock labels).
     var onsetDate: Date { Date(timeIntervalSince1970: TimeInterval(session.effectiveStartTs)) }
 
+    /// Retrospective sleep-onset estimate from timestamped stages. The rest-window start remains the
+    /// chart/edit anchor; only the Asleep clock uses this estimate. A five-minute non-wake run must be
+    /// continuously covered, so a wake label or timeline gap resets confirmation. Aggregate/imported
+    /// nights without a real timeline retain the window start rather than inventing an onset.
+    var estimatedSleepOnsetDate: Date? {
+        guard let realSegments else { return nil }
+        let origin = session.effectiveStartTs
+        let segments = realSegments.map {
+            StageSegment(start: origin + Int($0.start), end: origin + Int($0.end),
+                         stage: $0.stage.rawValue)
+        }
+        return SleepOnsetEstimate.timestamp(stages: segments).map {
+            Date(timeIntervalSince1970: TimeInterval($0))
+        }
+    }
+
     /// Stage intervals laid end-to-end across the night, in seconds from start.
     /// On-device computed nights use their REAL timeline; imported nights are reconstructed
     /// from durations only (the export has no per-epoch timeline).
@@ -94,7 +110,7 @@ struct Night {
         return out
     }
 
-    var onsetText: String { Night.timeFmt.string(from: Date(timeIntervalSince1970: TimeInterval(session.effectiveStartTs))) }
+    var onsetText: String { Night.timeFmt.string(from: estimatedSleepOnsetDate ?? onsetDate) }
     var wakeText: String { Night.timeFmt.string(from: Date(timeIntervalSince1970: TimeInterval(session.endTs))) }
     var dateLabel: String { Night.dateFmt.string(from: Date(timeIntervalSince1970: TimeInterval(session.effectiveStartTs))) }
 

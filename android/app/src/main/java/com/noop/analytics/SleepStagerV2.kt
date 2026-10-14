@@ -71,6 +71,7 @@ object SleepStagerV2 {
     fun stageSession(
         start: Long, end: Long, grav: List<GravitySample>,
         hr: List<HrSample>, rr: List<RrInterval>, resp: List<RespSample>,
+        useOnsetWakeExperiment: Boolean = false,
     ): List<StageSegment> {
         // PERF CLIP (v7.0.2 / #707): bound the grav/hr/rr streams to the only seconds any Epoch feature can
         // possibly READ before doing ANYTHING else — both the fingerprint and the compute then operate on the
@@ -92,9 +93,10 @@ object SleepStagerV2 {
         val hrC = clipSorted(hr.sortedBy { it.ts }, start - PAD_LO, end + PAD_HI) { it.ts }
         val rrC = clipSorted(rr.sortedBy { it.ts }, start - PAD_LO, end + PAD_HI) { it.ts }
 
-        val key = StagerCache.fingerprint(StagerCache.Version.V2, start, end, gravC, hrC, rrC)
+        val key = StagerCache.fingerprint(StagerCache.Version.V2, start, end, gravC, hrC, rrC,
+            experimentTag = if (useOnsetWakeExperiment) 1L else 0L)
         StagerCache.get(key)?.let { return StagerCache.copyOf(it) }
-        val segments = stageSessionUncached(start, end, gravC, hrC, rrC, resp)
+        val segments = stageSessionUncached(start, end, gravC, hrC, rrC, resp, useOnsetWakeExperiment)
         StagerCache.put(key, segments)
         return StagerCache.copyOf(segments)
     }
@@ -129,7 +131,7 @@ object SleepStagerV2 {
     @Suppress("UNUSED_PARAMETER") // `resp` keeps this a drop-in for SleepStager.stageSession(…resp:) (parity)
     private fun stageSessionUncached(
         start: Long, end: Long, grav: List<GravitySample>,
-        hr: List<HrSample>, rr: List<RrInterval>, resp: List<RespSample>,
+        hr: List<HrSample>, rr: List<RrInterval>, resp: List<RespSample>, useOnsetWakeExperiment: Boolean,
     ): List<StageSegment> {
         // Sort defensively so the windowed features behave regardless of caller ordering.
         val gravS = grav.sortedBy { it.ts }
@@ -138,7 +140,7 @@ object SleepStagerV2 {
 
         val feats = features(start, end, gravS, hrS, rrS)
         if (feats.isEmpty()) return listOf(StageSegment(start = start, end = end, stage = "light"))
-        val labels = stageEpochs(feats)
+        val labels = stageEpochs(feats, useOnsetWakeExperiment)
 
         // Tile [start, end] with one segment per staged epoch. The first segment back-fills [start, firstEpoch)
         // and the last extends to `end`. "awake" is renamed to the canonical "wake" used by V1 / StageSegment.
@@ -589,7 +591,7 @@ object SleepStagerV2 {
      *  extra cost is one Viterbi over an already-built lattice, not a second featurisation, and
      *  [stageSession] memoizes the whole thing anyway. When no sustained run exists the origin falls back to
      *  the window start, which is exactly the origin the shipped `c`-based guard used. */
-    private fun stageEpochs(feats: List<Epoch>): List<String> {
+    private fun stageEpochs(feats: List<Epoch>, useOnsetWakeExperiment: Boolean = false): List<String> {
         if (feats.isEmpty()) return emptyList()
 
         // Per-night z-score over the present values (population std; 0 std → 1 so a flat channel is neutral).
@@ -618,7 +620,7 @@ object SleepStagerV2 {
         // Held as the concrete HashMap (not the read-only `Map` view) so pass 2 can add the REM-latency guard
         // in place; `viterbi` still takes `List<Map<…>>`, which this satisfies by List's covariance.
         val seq = ArrayList<HashMap<String, Double>>(feats.size)
-        for (f in feats) {
+        for ((index, f) in feats.withIndex()) {
             val zhrv = zhr(f.hr); val zhvv = zhv(f.hrVar); val zmvv = zmv(f.moveFrac)
             val gate = deepGateSlope * maxOf(0.0, fpct(f.hrFlat11) - deepGateThresh)
             // Cardiac contribution to the AWAKE emission. On a motion-quiescent epoch the wrist did not move,
@@ -627,7 +629,13 @@ object SleepStagerV2 {
             // the same cardiac coefficients verbatim, so a night with any motion stages byte-identical; the
             // correction only ever holds a still, elevated-HR epoch. Mirrors Swift `awakeCardiac`.
             val awakeCardiac0 = 0.8 * zhvv + 0.4 * zhrv
-            val awakeCardiac = if (motionQuiescent(f)) minOf(0.0, awakeCardiac0) else awakeCardiac0
+            // Experimental onset-only guard: after repeated movement bursts in the preceding ten minutes,
+            // retain positive cardiac wake evidence during the next quiet epoch. The shipped rule clamps it
+            // everywhere; this bounded exception tests whether position changes corroborate a settling awake
+            // interval without treating every overnight turn as wake.
+            val inOnsetWindow = useOnsetWakeExperiment && f.minutesSinceOnset >= 0.0 && f.minutesSinceOnset < 90.0
+            val motionCorroborated = inOnsetWindow && recentTurnCount(feats, index) >= 2
+            val awakeCardiac = if (motionQuiescent(f) && !motionCorroborated) minOf(0.0, awakeCardiac0) else awakeCardiac0
             val em = HashMap<String, Double>()
             em["deep"] = -1.1 * zhvv - 0.5 * zmvv - gate + baseLogPrior["deep"]!!
             em["rem"] = 0.6 * zhvv - 0.6 * zmvv + 0.4 * zhrv + baseLogPrior["rem"]!!
@@ -637,6 +645,14 @@ object SleepStagerV2 {
             val pr = cyclePrior(f.clock, Double.POSITIVE_INFINITY)
             for (s in stageNames) em[s] = em[s]!! + pr[s]!!
             if (f.jerkMax > f.jerkScale * jerkFloorGateMult) em["awake"] = em["awake"]!! + motionGateBoost
+            // Offline onset estimate: repeated turns in the first ten minutes bias the initial Viterbi
+            // state toward wake, preserving a settling prefix before later evidence arrives.
+            if (useOnsetWakeExperiment && index == 0 && recentTurnCount(feats, minOf(feats.lastIndex, 19)) >= 2) {
+                em["awake"] = em["awake"]!! + motionGateBoost
+            }
+            if (motionCorroborated && motionQuiescent(f) && awakeCardiac0 > 0.2) {
+                em["awake"] = em["awake"]!! + motionGateBoost
+            }
             f.respReg?.let { rg -> val z = zrg(rg); em["deep"] = em["deep"]!! + respWeight * z; em["rem"] = em["rem"]!! - respWeight * z }
             seq.add(em)
         }
@@ -652,5 +668,12 @@ object SleepStagerV2 {
             seq[i]["rem"] = seq[i]["rem"]!! - remLatencyGuard(feats[i].minutesSinceOnset - originMin)
         }
         return viterbi(seq)
+    }
+
+    /** Existing jerk wake-gate events over the preceding ten minutes, including this epoch. */
+    internal fun recentTurnCount(feats: List<Epoch>, index: Int): Int {
+        if (index !in feats.indices) return 0
+        val lo = maxOf(0, index - 19)
+        return (lo..index).count { i -> feats[i].jerkMax > feats[i].jerkScale * jerkFloorGateMult }
     }
 }

@@ -1054,6 +1054,7 @@ final class IntelligenceEngine: ObservableObject {
         // day); read them ONCE here too so the config signature can fold them without reaching into the
         // detached loop.
         let useSleepStagerV2Global = PuffinExperiment.experimentalSleepV2Enabled
+        let useOnsetWakeExperimentGlobal = PuffinExperiment.onsetWakeEnabled
         let useMotionAwareWakeGlobal = PuffinExperiment.motionAwareWakeEnabled
         // Cache eligibility for the whole pass: never reuse while a Test-Centre trace is active (a cached
         // scan carries no fresh gate trace). Owner-level eligibility (registered WHOOP) is checked per day.
@@ -1100,7 +1101,7 @@ final class IntelligenceEngine: ObservableObject {
             String(sleepNeedHours.bitPattern),
             sleepConsistency.map { String($0.bitPattern) } ?? "nil",
             habitualMidsleepSec.map { "\($0)" } ?? "nil",
-            "\(useSleepStagerV2Global)", "\(useMotionAwareWakeGlobal)", "\(deepHrvWindow)",
+            "\(useSleepStagerV2Global)", "\(useOnsetWakeExperimentGlobal)", "\(useMotionAwareWakeGlobal)", "\(deepHrvWindow)",
             "\(spo2CandidateDisplayOn)",
             // #1545: MUST be here. The Effort recipe changes every day's strain, so a cached scan
             // produced under one method is stale the moment the user switches — serving it would show a
@@ -1436,6 +1437,7 @@ final class IntelligenceEngine: ObservableObject {
                 // toggle is the honest escape until real 4.0 ground truth settles it (#271/#319). Matches the
                 // self-heal restage below, which reads the same toggle.
                 let useSleepStagerV2 = PuffinExperiment.experimentalSleepV2Enabled
+                let useOnsetWakeExperiment = PuffinExperiment.onsetWakeEnabled
                 // #364 follow-up: read the motion-aware wake refinement toggle the same way (once, off the
                 // detached executor). Default OFF — see `PuffinExperiment.motionAwareWakeEnabled`. It only
                 // ever runs AFTER whichever stager above just ran, and self-gates on the night's observed
@@ -1530,6 +1532,7 @@ final class IntelligenceEngine: ObservableObject {
                                                      // #690: thread the V2 toggle into the NORMAL staging path so
                                                      // it affects detected nights, not just the self-heal restage.
                                                      useSleepStagerV2: useSleepStagerV2,
+                                                     useOnsetWakeExperiment: useOnsetWakeExperiment,
                                                      // #364 follow-up: same threading for the motion-aware wake
                                                      // refinement post-pass.
                                                      useMotionAwareWake: useMotionAwareWake,

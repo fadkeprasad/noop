@@ -1784,13 +1784,21 @@ final class Repository: ObservableObject {
         // which engine runs over the already-detected window — detection is identical either way.
         // (V7 Pillar 3b)
         let useV2 = PuffinExperiment.experimentalSleepV2Enabled
+        let useOnsetWakeExperiment = PuffinExperiment.onsetWakeEnabled
+        let band = useV2 && useOnsetWakeExperiment
+            ? ((try? await store.sleepStateSamples(deviceId: deviceId, from: lo, to: hi, limit: 200_000)) ?? [])
+            : []
+        let bandStates = band.map { (ts: $0.ts, state: $0.state) }
         let segs = await Task.detached(priority: .utility) {
             let staged = useV2
-                ? SleepStagerV2.stageSession(start: start, end: end, grav: grav, hr: hr, rr: rr, resp: resp)
+                ? SleepStagerV2.stageSession(start: start, end: end, grav: grav, hr: hr, rr: rr, resp: resp,
+                                             useOnsetWakeExperiment: useOnsetWakeExperiment)
                 : SleepStager.stageSession(start: start, end: end, grav: grav, hr: hr, rr: rr, resp: resp)
             // #364 follow-up: motion-aware wake refinement post-pass, same toggle-shaped no-op when off
             // as every other Experimental switch here.
-            return WakeMotionRefinement.apply(staged, grav: grav, steps: steps, enabled: useMotionAwareWake)
+            let onsetAdjusted = SleepStager.applyBandConfirmedOnset(staged, start: start, end: end,
+                bandSleepState: bandStates, enabled: useV2 && useOnsetWakeExperiment)
+            return WakeMotionRefinement.apply(onsetAdjusted, grav: grav, steps: steps, enabled: useMotionAwareWake)
         }.value
         return AnalyticsEngine.encodeStages(segs)
     }

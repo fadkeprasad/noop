@@ -2852,4 +2852,10 @@
     <string name="raw_diag_ecg_probe_running">Pode ainda estar a decorrer uma captura nesta pulseira. O veredicto vai para o strap log.</string>
     <string name="today_customize_live_session_availability">Aparece hoje quando as sessões em direto estão ativadas nas Definições ou existe uma sessão ativa.</string>
     <string name="l10n_app_changelog_today_your_way_heart_rate_any_5e1308b3">Hoje à sua maneira, frequência cardíaca para qualquer aplicação e italiano</string>
+    <string name="l10n_sleep_screen_estimated_onset_6a4c1f20">Início estimado do sono</string>
+    <string name="l10n_sleep_screen_estimated_onset_woke_a11y_42b8d5e3">Início estimado do sono às %1$s, acordou às %2$s</string>
+    <string name="l10n_sleep_screen_window_start_4c83d2a0">Início da janela de sono</string>
+    <string name="l10n_sleep_screen_window_start_woke_a11y_2fe7b3c1">Início da janela de sono às %1$s, acordou às %2$s</string>
+    <string name="l10n_settings_onset_wake_experiment_7dd6c082">Deteção experimental de vigília no início do sono</string>
+    <string name="l10n_settings_onset_wake_experiment_help_4bb32571">Testa se movimentos repetidos antes de dormir ajudam a identificar o tempo acordado enquanto se acomoda. Experimental, desativado por predefinição e limitado aos primeiros 90 minutos da janela detetada.</string>
 </resources>

@@ -138,6 +138,8 @@ internal data class HeroNight(
     // anchored to it moved neither displayed bound on a split night. The editor frames itself on this
     // list — seeding, coverage-testing and writing across the whole night — instead of one block of it.
     val heroGroup: List<SleepSession> = emptyList(),
+    /** Retrospective first continuously-covered five-minute sleep run; null means no trustworthy timeline. */
+    val estimatedSleepOnsetTs: Long? = null,
 )
 
 /** What the hero card draws for the selected night — null means no usable stage data
